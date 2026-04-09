@@ -49,7 +49,7 @@ All data is persisted to `worlds.json` (written next to the executable at runtim
 **API integration** is in `MainWindow.xaml.cs`:
 - Endpoint: `https://api.anthropic.com/v1/messages`
 - Model: selectable in-app via `_manager.SelectedModel` (persisted in `worlds.json`); options defined in `AvailableModels` array — default is `claude-haiku-4-5-20251001`
-- API key is currently hardcoded as `private const string API_KEY` — move to config before sharing
+- API key is read from the `ANTHROPIC_API_KEY` environment variable (`Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")`); never hardcode it in source
 - `CallClaudeAPI(CharacterProfile profile, string userInput)` — `userInput` is used for lorebook keyword matching before the API call
 
 **System prompt construction** happens in `CharacterProfile.BuildSystemPrompt()` — assembles world context, character attributes, relationships, speech style, and an optional `[로어북]` section from keyword-matched `LoreEntry` items. Lorebook entries are stored per-character in `CharacterProfile.Lore` and filtered in `CallClaudeAPI` before being passed to `BuildSystemPrompt`.

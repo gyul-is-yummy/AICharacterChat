@@ -91,6 +91,7 @@ namespace AICharacterChat
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             // 세계관 이름 (클릭 → 전환)
             var nameBtn = new Button
@@ -128,8 +129,25 @@ namespace AICharacterChat
             editBtn.Click += WorldEdit_Click;
             Grid.SetColumn(editBtn, 1);
 
+            // 🗑 삭제 버튼
+            var deleteBtn = new Button
+            {
+                Content = "🗑",
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(100, 130, 170)),
+                BorderThickness = new Thickness(0),
+                FontSize = 11,
+                Padding = new Thickness(2, 0, 0, 0),
+                Cursor = Cursors.Hand,
+                Tag = world.Id,
+                ToolTip = "세계관 삭제"
+            };
+            deleteBtn.Click += WorldDelete_Click;
+            Grid.SetColumn(deleteBtn, 2);
+
             grid.Children.Add(nameBtn);
             grid.Children.Add(editBtn);
+            grid.Children.Add(deleteBtn);
             border.Child = grid;
             return border;
         }
@@ -165,6 +183,33 @@ namespace AICharacterChat
             world.Rules = result.Rules;
             _manager.Save();
             RefreshWorldList();
+        }
+
+        // 세계관 삭제
+        private void WorldDelete_Click(object sender, RoutedEventArgs e)
+        {
+            string id = (string)((Button)sender).Tag;
+            var world = _manager.Worlds.FirstOrDefault(w => w.Id == id);
+            if (world == null) return;
+
+            if (_manager.Worlds.Count <= 1)
+            {
+                MessageBox.Show("세계관이 한 개 이상 있어야 합니다.", "알림");
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"'{world.Name}'을(를) 삭제할까요?\n포함된 캐릭터와 대화 기록도 함께 삭제됩니다.",
+                "세계관 삭제",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            _manager.RemoveWorld(id);
+            RefreshWorldList();
+            RefreshCharacterList();
+            LoadActiveCharacterChat();
         }
 
         // + 세계관 추가
