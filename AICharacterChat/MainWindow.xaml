@@ -1,0 +1,150 @@
+﻿<Window x:Class="AICharacterChat.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="로맨스 판타지 채팅" Height="700" Width="720"
+        Background="#1a1a2e">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="165"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ── 왼쪽 패널 ── -->
+        <Grid Grid.Column="0" Background="#12122a">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30"/>
+                <!-- 세계관 헤더 -->
+                <RowDefinition Height="120"/>
+                <!-- 세계관 목록 -->
+                <RowDefinition Height="38"/>
+                <!-- + 세계관 버튼 -->
+                <RowDefinition Height="1"/>
+                <!-- 구분선 -->
+                <RowDefinition Height="30"/>
+                <!-- 캐릭터 헤더 -->
+                <RowDefinition Height="*"/>
+                <!-- 캐릭터 목록 -->
+                <RowDefinition Height="45"/>
+                <!-- + 캐릭터 버튼 -->
+            </Grid.RowDefinitions>
+
+            <!-- 세계관 헤더 -->
+            <TextBlock Grid.Row="0"
+                       Text="세계관"
+                       FontSize="12" FontWeight="Bold"
+                       Foreground="#7799cc"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"/>
+
+            <!-- 세계관 목록 -->
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="WorldListPanel" Margin="6,4,6,0"/>
+            </ScrollViewer>
+
+            <!-- + 세계관 버튼 -->
+            <Button Grid.Row="2"
+                    x:Name="AddWorldButton"
+                    Content="＋ 세계관"
+                    Margin="8,4,8,4"
+                    Background="#1a3060" Foreground="#aaddff"
+                    BorderThickness="0" FontSize="12"
+                    Cursor="Hand"
+                    Click="AddWorldButton_Click"/>
+
+            <!-- 구분선 -->
+            <Rectangle Grid.Row="3" Fill="#2a2a4a"/>
+
+            <!-- 캐릭터 헤더 -->
+            <TextBlock Grid.Row="4"
+                       Text="캐릭터"
+                       FontSize="12" FontWeight="Bold"
+                       Foreground="#9966cc"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"/>
+
+            <!-- 캐릭터 목록 -->
+            <ScrollViewer Grid.Row="5"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="CharacterListPanel" Margin="6,4,6,0"/>
+            </ScrollViewer>
+
+            <!-- + 캐릭터 버튼 -->
+            <Button Grid.Row="6"
+                    x:Name="AddCharacterButton"
+                    Content="＋ 캐릭터"
+                    Margin="8,4,8,8"
+                    Background="#7b2ff7" Foreground="White"
+                    BorderThickness="0" FontSize="12"
+                    Cursor="Hand"
+                    Click="AddCharacterButton_Click"/>
+        </Grid>
+
+        <!-- ── 오른쪽: 채팅 영역 ── -->
+        <Grid Grid.Column="1" Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="120"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <TextBlock x:Name="CharacterNameText"
+                           FontSize="22" FontWeight="Bold"
+                           Foreground="#e0aaff"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+                <StackPanel HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Margin="0,0,4,0">
+                    <TextBlock Text="모델:"
+                               Foreground="#9966cc"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="0,0,5,0"/>
+                    <ComboBox x:Name="ModelComboBox"
+                              Width="190"
+                              Background="#16213e"
+                              Foreground="White"
+                              BorderBrush="#7b2ff7"
+                              FontSize="11"
+                              SelectionChanged="ModelComboBox_SelectionChanged"/>
+                </StackPanel>
+            </Grid>
+
+            <ScrollViewer x:Name="ChatScrollViewer"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          Margin="0,5">
+                <StackPanel x:Name="ChatPanel" Margin="5"/>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="InputBox"
+                         Grid.Column="0"
+                         Background="#16213e" Foreground="White"
+                         BorderBrush="#e0aaff" BorderThickness="1"
+                         Padding="10" FontSize="14"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         VerticalContentAlignment="Top"
+                         KeyDown="InputBox_KeyDown"/>
+                <Button x:Name="SendButton"
+                        Grid.Column="1"
+                        Content="전송"
+                        Margin="5,0,0,0"
+                        Background="#7b2ff7" Foreground="White"
+                        BorderThickness="0" FontSize="14"
+                        Cursor="Hand"
+                        Click="SendButton_Click"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

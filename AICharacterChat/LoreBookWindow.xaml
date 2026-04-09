@@ -1,0 +1,119 @@
+<Window x:Class="AICharacterChat.LoreBookWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="로어북" Height="660" Width="520"
+        Background="#1a1a2e"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        MinHeight="500" MinWidth="420">
+
+    <Grid Margin="16,12,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- 제목 -->
+            <RowDefinition Height="*"/>
+            <!-- 항목 목록 -->
+            <RowDefinition Height="Auto"/>
+            <!-- + 추가 버튼 -->
+            <RowDefinition Height="Auto"/>
+            <!-- 구분선 -->
+            <RowDefinition Height="Auto"/>
+            <!-- 편집 패널 -->
+        </Grid.RowDefinitions>
+
+        <!-- 제목 -->
+        <TextBlock Grid.Row="0"
+                   Text="로어북"
+                   FontSize="20" FontWeight="Bold"
+                   Foreground="#e0aaff"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,14"/>
+
+        <!-- 항목 목록 -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      Margin="0,0,0,8">
+            <StackPanel x:Name="LoreListPanel"/>
+        </ScrollViewer>
+
+        <!-- + 항목 추가 버튼 -->
+        <Button Grid.Row="2"
+                x:Name="AddEntryButton"
+                Content="＋ 항목 추가"
+                Height="34"
+                Background="#2a2a5a" Foreground="#aaaaff"
+                BorderBrush="#5555aa" BorderThickness="1"
+                FontSize="13" Cursor="Hand"
+                Margin="0,0,0,12"
+                Click="AddEntryButton_Click"/>
+
+        <!-- 구분선 -->
+        <Separator Grid.Row="3" Background="#3a3a5a" Margin="0,0,0,12"/>
+
+        <!-- 편집 패널 (추가/편집 시에만 표시) -->
+        <Border Grid.Row="4"
+                x:Name="EditPanel"
+                Visibility="Collapsed"
+                Background="#12122a"
+                BorderBrush="#5544aa"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14">
+            <StackPanel>
+
+                <TextBlock x:Name="EditPanelTitle"
+                           Text="항목 추가"
+                           FontSize="14" FontWeight="Bold"
+                           Foreground="#c8a8ff"
+                           Margin="0,0,0,12"/>
+
+                <!-- 항목 이름 -->
+                <TextBlock Text="항목 이름"
+                           Foreground="#aaaacc" FontSize="12" Margin="0,0,0,4"/>
+                <TextBox x:Name="TitleBox"
+                         Background="#16213e" Foreground="White"
+                         BorderBrush="#e0aaff" BorderThickness="1"
+                         Padding="8" FontSize="13"
+                         Margin="0,0,0,10"/>
+
+                <!-- 키워드 -->
+                <TextBlock Text="트리거 키워드 (쉼표로 구분)"
+                           Foreground="#aaaacc" FontSize="12" Margin="0,0,0,4"/>
+                <TextBox x:Name="KeywordsBox"
+                         Background="#16213e" Foreground="White"
+                         BorderBrush="#e0aaff" BorderThickness="1"
+                         Padding="8" FontSize="13"
+                         Margin="0,0,0,10"/>
+
+                <!-- 삽입 내용 -->
+                <TextBlock Text="삽입 내용"
+                           Foreground="#aaaacc" FontSize="12" Margin="0,0,0,4"/>
+                <TextBox x:Name="ContentBox"
+                         Background="#16213e" Foreground="White"
+                         BorderBrush="#e0aaff" BorderThickness="1"
+                         Padding="8" FontSize="13"
+                         Height="100"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,12"/>
+
+                <!-- 저장 / 취소 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="CancelEditButton"
+                            Content="취소"
+                            Width="80" Height="32"
+                            Margin="0,0,8,0"
+                            Background="#2a2a4a" Foreground="White"
+                            BorderThickness="0" FontSize="13" Cursor="Hand"
+                            Click="CancelEditButton_Click"/>
+                    <Button x:Name="SaveEditButton"
+                            Content="저장"
+                            Width="80" Height="32"
+                            Background="#7b2ff7" Foreground="White"
+                            BorderThickness="0" FontSize="13" Cursor="Hand"
+                            Click="SaveEditButton_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

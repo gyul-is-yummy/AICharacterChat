@@ -1,0 +1,45 @@
+﻿<Window x:Class="AICharacterChat.UserProfileManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="유저 프로필 관리" Height="420" Width="360"
+        Background="#1a1a2e"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="유저 프로필 관리"
+                   FontSize="18" FontWeight="Bold"
+                   Foreground="#ffccaa"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,14"/>
+
+        <Border Grid.Row="1"
+                BorderBrush="#3a3a5a" BorderThickness="1"
+                CornerRadius="4" Margin="0,0,0,10">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="ProfileListPanel" Margin="6"/>
+            </ScrollViewer>
+        </Border>
+
+        <Button Grid.Row="2"
+                Content="＋ 새 유저 프로필 추가"
+                Height="34" Margin="0,0,0,10"
+                Background="#cc7733" Foreground="White"
+                BorderThickness="0" FontSize="13" Cursor="Hand"
+                Click="AddProfile_Click"/>
+
+        <Button Grid.Row="3"
+                Content="닫기"
+                Height="34"
+                Background="#2a2a4a" Foreground="White"
+                BorderThickness="0" FontSize="13" Cursor="Hand"
+                Click="CloseButton_Click"/>
+    </Grid>
+</Window>
