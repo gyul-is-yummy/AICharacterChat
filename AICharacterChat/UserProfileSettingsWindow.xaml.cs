@@ -1,14 +1,18 @@
-﻿using System.Windows;
+using System.Windows;
+using AICharacterChat.Domain.Models;
 
 namespace AICharacterChat
 {
     public partial class UserProfileSettingsWindow : Window
     {
-        public UserProfile ResultProfile { get; private set; }
+        private readonly UserPersona _current;
 
-        public UserProfileSettingsWindow(UserProfile current)
+        public UserPersona ResultProfile { get; private set; } = new();
+
+        public UserProfileSettingsWindow(UserPersona current)
         {
             InitializeComponent();
+            _current = current;
             NameBox.Text = current.Name;
             AppearanceBox.Text = current.Appearance;
             PersonalityBox.Text = current.Personality;
@@ -22,8 +26,10 @@ namespace AICharacterChat
                 MessageBox.Show("이름을 입력해주세요.", "알림");
                 return;
             }
-            ResultProfile = new UserProfile
+
+            ResultProfile = new UserPersona
             {
+                Id = _current.Id,
                 Name = NameBox.Text.Trim(),
                 Appearance = AppearanceBox.Text.Trim(),
                 Personality = PersonalityBox.Text.Trim(),

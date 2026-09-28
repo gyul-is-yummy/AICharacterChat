@@ -1,4 +1,4 @@
-﻿namespace AICharacterChat
+namespace AICharacterChat.Domain.Models
 {
     public class CustomField
     {

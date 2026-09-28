@@ -1,29 +1,36 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using AICharacterChat.Domain.Models;
+using DomainCustomField = AICharacterChat.Domain.Models.CustomField;
 
 namespace AICharacterChat
 {
     public partial class CharacterSettingsWindow : Window
     {
-        public CharacterProfile ResultProfile { get; private set; }
-
-        private readonly WorldProfile _world;
-        private readonly WorldManager _manager;
+        private readonly Character _current;
+        private readonly World _world;
+        private readonly Func<Task> _saveAsync;
         private readonly Dictionary<string, TextBox> _relationBoxes = new();
 
+        public Character ResultProfile { get; private set; } = new();
+        public string SelectedUserPersonaId { get; private set; } = "";
+
         public CharacterSettingsWindow(
-            CharacterProfile current,
-            List<CharacterProfile> otherCharacters,
-            WorldProfile world,
-            WorldManager manager)
+            Character current,
+            List<Character> otherCharacters,
+            World world,
+            Func<Task> saveAsync)
         {
             InitializeComponent();
+            _current = current;
             _world = world;
-            _manager = manager;
+            _saveAsync = saveAsync;
 
             NameBox.Text = current.Name;
             AgeBox.Text = current.Age;
@@ -31,7 +38,7 @@ namespace AICharacterChat
             {
                 "남" => 0,
                 "여" => 1,
-                _   => 2
+                _ => 2
             };
             JobBox.Text = current.Job;
             AppearanceBox.Text = current.Appearance;
@@ -39,18 +46,19 @@ namespace AICharacterChat
             EtcBox.Text = current.Etc;
             SecretBox.Text = current.Secret;
             SpeechStyleBox.Text = current.SpeechStyle;
-            SituationBox.Text = current.Situation;
+            SituationBox.Text = current.DefaultScenario;
 
             BuildRelationshipUI(current, otherCharacters);
 
-            // 저장된 추가 항목 복원
             foreach (var field in current.CustomFields)
                 AddCustomFieldRow(field.Label, field.Value);
 
-            RefreshUserProfileComboBox(current.SelectedUserProfileId);
+            string selectedUserPersonaId =
+                world.GetSessionForCharacter(current.Id)?.UserPersonaId
+                ?? world.UserPersonas.FirstOrDefault()?.Id
+                ?? "";
+            RefreshUserProfileComboBox(selectedUserPersonaId);
         }
-
-        // ─── 추가 항목 ────────────────────────────────
 
         private void AddFieldButton_Click(object sender, RoutedEventArgs e)
             => AddCustomFieldRow("", "");
@@ -74,7 +82,6 @@ namespace AICharacterChat
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // 항목 이름 입력창
             var labelBox = new TextBox
             {
                 Text = label,
@@ -87,9 +94,7 @@ namespace AICharacterChat
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Tag = "label"
             };
-            labelBox.SetValue(System.Windows.Controls.TextBox.TextProperty, label);
 
-            // 항목 내용 입력창
             var valueBox = new TextBox
             {
                 Text = value,
@@ -107,7 +112,6 @@ namespace AICharacterChat
                 Tag = "value"
             };
 
-            // 삭제 버튼
             var deleteBtn = new Button
             {
                 Content = "✕",
@@ -119,8 +123,7 @@ namespace AICharacterChat
                 Cursor = Cursors.Hand,
                 VerticalAlignment = VerticalAlignment.Top
             };
-            deleteBtn.Click += (s, e) =>
-                CustomFieldsPanel.Children.Remove(container);
+            deleteBtn.Click += (_, _) => CustomFieldsPanel.Children.Remove(container);
 
             Grid.SetColumn(labelBox, 0);
             Grid.SetColumn(valueBox, 2);
@@ -130,41 +133,40 @@ namespace AICharacterChat
             grid.Children.Add(valueBox);
             grid.Children.Add(deleteBtn);
             container.Child = grid;
-
             CustomFieldsPanel.Children.Add(container);
         }
 
-        // 추가 항목 수집
-        private List<CustomField> CollectCustomFields()
+        private List<DomainCustomField> CollectCustomFields()
         {
-            var result = new List<CustomField>();
+            var result = new List<DomainCustomField>();
             foreach (Border container in CustomFieldsPanel.Children)
             {
                 var grid = (Grid)container.Child;
                 var labelBox = grid.Children.OfType<TextBox>()
-                                   .FirstOrDefault(t => (string)t.Tag == "label");
+                    .FirstOrDefault(t => (string)t.Tag == "label");
                 var valueBox = grid.Children.OfType<TextBox>()
-                                   .FirstOrDefault(t => (string)t.Tag == "value");
+                    .FirstOrDefault(t => (string)t.Tag == "value");
 
-                if (labelBox == null || valueBox == null) continue;
+                if (labelBox == null || valueBox == null)
+                    continue;
                 if (string.IsNullOrWhiteSpace(labelBox.Text) &&
-                    string.IsNullOrWhiteSpace(valueBox.Text)) continue;
+                    string.IsNullOrWhiteSpace(valueBox.Text))
+                    continue;
 
-                result.Add(new CustomField
+                result.Add(new DomainCustomField
                 {
                     Label = labelBox.Text.Trim(),
                     Value = valueBox.Text.Trim()
                 });
             }
+
             return result;
         }
-
-        // ─── 유저 프로필 콤보박스 ─────────────────────
 
         private void RefreshUserProfileComboBox(string selectedId)
         {
             UserProfileComboBox.Items.Clear();
-            foreach (var up in _world.UserProfiles)
+            foreach (var up in _world.UserPersonas)
             {
                 UserProfileComboBox.Items.Add(new ComboBoxItem
                 {
@@ -172,6 +174,7 @@ namespace AICharacterChat
                     Tag = up.Id
                 });
             }
+
             var target = UserProfileComboBox.Items
                 .OfType<ComboBoxItem>()
                 .FirstOrDefault(i => (string)i.Tag == selectedId);
@@ -181,19 +184,13 @@ namespace AICharacterChat
 
         private void ManageUserProfiles_Click(object sender, RoutedEventArgs e)
         {
-            string currentId = (UserProfileComboBox.SelectedItem as ComboBoxItem)
-                               ?.Tag as string ?? "";
-            var win = new UserProfileManagerWindow(_world, _manager);
-            win.Owner = this;
+            string currentId = (UserProfileComboBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
+            var win = new UserProfileManagerWindow(_world, _saveAsync) { Owner = this };
             win.ShowDialog();
             RefreshUserProfileComboBox(currentId);
         }
 
-        // ─── 관계 UI ──────────────────────────────────
-
-        private void BuildRelationshipUI(
-            CharacterProfile current,
-            List<CharacterProfile> others)
+        private void BuildRelationshipUI(Character current, List<Character> others)
         {
             RelationshipsPanel.Children.Clear();
             _relationBoxes.Clear();
@@ -243,8 +240,6 @@ namespace AICharacterChat
             }
         }
 
-        // ─── 저장 ─────────────────────────────────────
-
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(NameBox.Text))
@@ -255,6 +250,7 @@ namespace AICharacterChat
 
             string selectedUserProfileId =
                 (UserProfileComboBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
+            SelectedUserPersonaId = selectedUserProfileId;
 
             var relationships = _relationBoxes
                 .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Value.Text))
@@ -265,8 +261,9 @@ namespace AICharacterChat
                 })
                 .ToList();
 
-            ResultProfile = new CharacterProfile
+            ResultProfile = new Character
             {
+                Id = _current.Id,
                 Name = NameBox.Text.Trim(),
                 Age = AgeBox.Text.Trim(),
                 Gender = (GenderBox.SelectedItem as ComboBoxItem)?.Content as string ?? "기타",
@@ -277,9 +274,9 @@ namespace AICharacterChat
                 Etc = EtcBox.Text.Trim(),
                 Secret = SecretBox.Text.Trim(),
                 SpeechStyle = SpeechStyleBox.Text.Trim(),
-                Situation = SituationBox.Text.Trim(),
+                DefaultScenario = SituationBox.Text.Trim(),
                 CustomFields = CollectCustomFields(),
-                SelectedUserProfileId = selectedUserProfileId
+                Lore = _current.Lore
             };
 
             DialogResult = true;

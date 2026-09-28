@@ -1,32 +1,36 @@
-﻿using System.Linq;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using AICharacterChat.Domain.Models;
+using AICharacterChat.Presentation.ViewModels;
 
 namespace AICharacterChat
 {
     public partial class UserProfileManagerWindow : Window
     {
-        private readonly WorldProfile _world;
-        private readonly WorldManager _manager;
+        private readonly World _world;
+        private readonly UserPersonaManagerViewModel _viewModel;
 
-        public UserProfileManagerWindow(WorldProfile world, WorldManager manager)
+        public UserProfileManagerWindow(World world, Func<Task> saveAsync)
         {
             InitializeComponent();
             _world = world;
-            _manager = manager;
+            _viewModel = new UserPersonaManagerViewModel(world, saveAsync);
             RefreshList();
         }
 
         private void RefreshList()
         {
             ProfileListPanel.Children.Clear();
-            foreach (var profile in _world.UserProfiles)
+            foreach (var profile in _viewModel.UserPersonas)
                 ProfileListPanel.Children.Add(CreateItem(profile));
         }
 
-        private Border CreateItem(UserProfile profile)
+        private Border CreateItem(UserPersona profile)
         {
             var border = new Border
             {
@@ -87,47 +91,43 @@ namespace AICharacterChat
             return border;
         }
 
-        private void AddProfile_Click(object sender, RoutedEventArgs e)
+        private async void AddProfile_Click(object sender, RoutedEventArgs e)
         {
-            var win = new UserProfileSettingsWindow(new UserProfile());
-            win.Owner = this;
-            if (win.ShowDialog() != true) return;
+            var win = new UserProfileSettingsWindow(new UserPersona()) { Owner = this };
+            if (win.ShowDialog() != true)
+                return;
 
-            _world.UserProfiles.Add(win.ResultProfile);
-            _manager.Save();
+            await _viewModel.AddAsync(win.ResultProfile);
             RefreshList();
         }
 
-        private void EditProfile_Click(object sender, RoutedEventArgs e)
+        private async void EditProfile_Click(object sender, RoutedEventArgs e)
         {
             string id = (string)((Button)sender).Tag;
-            var profile = _world.UserProfiles.FirstOrDefault(u => u.Id == id);
-            if (profile == null) return;
+            var profile = _viewModel.UserPersonas.FirstOrDefault(u => u.Id == id);
+            if (profile == null)
+                return;
 
-            var win = new UserProfileSettingsWindow(profile);
-            win.Owner = this;
-            if (win.ShowDialog() != true) return;
+            var win = new UserProfileSettingsWindow(profile) { Owner = this };
+            if (win.ShowDialog() != true)
+                return;
 
-            var r = win.ResultProfile;
-            profile.Name = r.Name;
-            profile.Appearance = r.Appearance;
-            profile.Personality = r.Personality;
-            profile.AdditionalInfo = r.AdditionalInfo;
-            _manager.Save();
+            await _viewModel.UpdateAsync(profile, win.ResultProfile);
             RefreshList();
         }
 
-        private void DeleteProfile_Click(object sender, RoutedEventArgs e)
+        private async void DeleteProfile_Click(object sender, RoutedEventArgs e)
         {
-            if (_world.UserProfiles.Count <= 1)
+            if (_world.UserPersonas.Count <= 1)
             {
                 MessageBox.Show("유저 프로필이 한 개 이상 있어야 합니다.", "알림");
                 return;
             }
 
             string id = (string)((Button)sender).Tag;
-            var profile = _world.UserProfiles.FirstOrDefault(u => u.Id == id);
-            if (profile == null) return;
+            var profile = _viewModel.UserPersonas.FirstOrDefault(u => u.Id == id);
+            if (profile == null)
+                return;
 
             var confirm = MessageBox.Show(
                 $"'{profile.Name}' 프로필을 삭제할까요?",
@@ -135,10 +135,10 @@ namespace AICharacterChat
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
-            if (confirm != MessageBoxResult.Yes) return;
+            if (confirm != MessageBoxResult.Yes)
+                return;
 
-            _world.UserProfiles.RemoveAll(u => u.Id == id);
-            _manager.Save();
+            await _viewModel.DeleteAsync(profile);
             RefreshList();
         }
 

@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 
-namespace AICharacterChat
+namespace AICharacterChat.Domain.Models
 {
-    public class UserProfile
+    public class UserPersona
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string Name { get; set; } = "나";

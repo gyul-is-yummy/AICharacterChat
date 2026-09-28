@@ -1,100 +1,143 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This repository is a Korean-language WPF character chat app using Anthropic Claude.
 
-## Collaboration Rules
-
-- **Before making large changes:** If a task requires modifying many files or significant restructuring, stop and confirm the plan with me before proceeding.
-- **Modularize by feature:** Do not put everything in one file. Split code into separate files organized by feature or responsibility.
-- **Clarify before acting:** If a request is ambiguous or unclear, do not infer and execute. Instead, summarize your understanding of the request and ask me to confirm before doing anything.
-
-## Build & Run
+## Build And Test
 
 ```bash
 dotnet build AICharacterChat.sln
-dotnet run --project AICharacterChat/AICharacterChat.csproj
+dotnet test AICharacterChat.sln
 ```
 
-- Target framework: `net8.0-windows` (Windows only — WPF)
-- Single dependency: `Newtonsoft.Json` v13.0.4
-- No test projects exist
+- Current target framework: `net8.0-windows`
+- .NET 10 migration is intentionally not applied because this machine only has SDK `9.0.302`
+- Main packages: `Newtonsoft.Json`, `CommunityToolkit.Mvvm`
+- Tests use xUnit with `Microsoft.NET.Test.Sdk` and are discovered by `dotnet test`
 
 ## Architecture
 
-This is a Korean-language romantic fantasy RPG chatbot built with WPF. Users create worlds and characters, then chat with AI-powered characters via the Anthropic Claude API.
+The app remains a single WPF project, but code is organized by responsibility:
 
-**Data hierarchy:** `WorldManager` → `WorldProfile[]` → `CharacterProfile[]` → `ChatMessage[]` / `LoreEntry[]`
-
-All data is persisted to `worlds.json` (written next to the executable at runtime) by `WorldManager.cs`, which handles serialization/deserialization and deduplication on load.
-
-**Key files:**
-
-| File | Role |
-|---|---|
-| `MainWindow.xaml.cs` | Orchestrator: chat UI, API calls, world/character switching |
-| `CharacterProfile.cs` | Data model + generates the Claude system prompt from character fields |
-| `WorldManager.cs` | JSON persistence for all worlds, characters, user profiles, and chat history |
-| `CharacterSettingsWindow.xaml.cs` | Edit character attributes, relationships, custom fields |
-| `WorldSettingsWindow.xaml.cs` | Edit world settings (genre, era, rules) |
-| `UserProfileManagerWindow.xaml.cs` | Manage user personas (the player character) |
-| `UserProfileSettingsWindow.xaml.cs` | Edit individual user profile fields |
-| `LoreEntry.cs` | Lorebook entry model (Id, Title, Keywords, Content, IsEnabled) |
-| `LoreBookWindow.xaml.cs` | Per-character lorebook manager (add/edit/delete/toggle entries) |
-| `ChatMessage.cs` | API message model (role + content) |
-| `CustomField.cs` | User-defined character attribute fields |
-| `CharacterRelationship.cs` | Relationship data between two characters |
-| `UserProfile.cs` | Player persona data model |
-| `WorldProfile.cs` | World data model (contains character + user profile lists) |
-
-**API integration** is in `MainWindow.xaml.cs`:
-- Endpoint: `https://api.anthropic.com/v1/messages`
-- Model: selectable in-app via `_manager.SelectedModel` (persisted in `worlds.json`); options defined in `AvailableModels` array — default is `claude-haiku-4-5-20251001`
-- API key is read from the `ANTHROPIC_API_KEY` environment variable (`Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")`); never hardcode it in source
-- `CallClaudeAPI(CharacterProfile profile, string userInput)` — `userInput` is used for lorebook keyword matching before the API call
-
-**System prompt construction** happens in `CharacterProfile.BuildSystemPrompt()` — assembles world context, character attributes, relationships, speech style, and an optional `[로어북]` section from keyword-matched `LoreEntry` items. Lorebook entries are stored per-character in `CharacterProfile.Lore` and filtered in `CallClaudeAPI` before being passed to `BuildSystemPrompt`.
-
-## UI Structure
-
-Two-panel dark-themed layout (`#1a1a2e` / `#7b2ff7` purple palette):
-- **Left sidebar:** world list (top) → character list (bottom) within selected world
-- **Right panel:** chat history + message input
-
-All UI text and code comments are in Korean.
-
-`App.xaml` defines global implicit styles for `ComboBox` and `ComboBoxItem` (dark background `#16213e`, light text, purple highlight on hover/open). These apply automatically to every `ComboBox` in the app — do not set `Background`/`Foreground` on individual `ComboBoxItem` instances in code-behind, as local values override the style and break hover effects.
-
-## Common Patterns
-
-```csharp
-// Access active character
-_manager.ActiveWorld?.ActiveCharacter
-
-// Always save after any data change
-_manager.Save();
-
-// Refresh UI after character list changes
-RefreshCharacterList();
-LoadActiveCharacterChat();
-
-// Wrap user input before sending to API
-string wrappedInput = $"[현재 상황 서술]\n{userInput}\n\n위 상황에서 {profile.Name}으로서 반응해주세요...";
+```text
+AICharacterChat/
+  Domain/
+    Enums/
+    Models/
+  Application/
+    Chat/
+    Interfaces/
+    Models/
+  Infrastructure/
+    AI/Anthropic/
+    Persistence/
+  Presentation/
+    ViewModels/
 ```
 
-## Critical Rules
+Core flow:
 
-- **Never remove `partial`** from window classes — XAML auto-generates a matching partial class
-- **Never duplicate `x:Name`** in XAML — causes CS0111 build errors; fix by deleting `obj/` folder and rebuilding
-- **Always call `_manager.Save()`** after modifying any data
-- **Do not save API error responses** to `ConversationHistory` — check for `"(오류가 발생했습니다"` prefix before saving
-- **`CharacterSettingsWindow` constructor takes 4 params:** `(current, otherCharacters, world, manager)`
-- **`BuildSystemPrompt()` takes 4 params:** `(world, worldCharacters, userProfile, matchingLore)` — `matchingLore` defaults to `null` (no lore section appended)
-- **Input wrapping:** user-visible bubble shows raw input; `ConversationHistory` stores wrapped version — `UnwrapInput()` reverses this on chat reload
-- **Deduplication runs on every load** — `WorldManager.Load()` deduplicates worlds, characters, user profiles, chat messages, custom fields (by Label+Value), and lore entries (by Id)
-- **Computed properties must have `[JsonIgnore]`** — `ActiveWorld` (WorldManager) and `ActiveCharacter` (WorldProfile) are getter-only properties computed at runtime. Without `[JsonIgnore]`, Newtonsoft.Json serializes them as redundant duplicate objects in `worlds.json`. Any new computed property that derives from existing data must also carry `[JsonIgnore]`.
+```text
+MainViewModel
+-> ChatService
+-> LoreMatcher
+-> PromptBuilder
+-> IChatModelClient
+-> IWorldRepository
+```
 
-## Known Issues & Fixes
+`MainWindow.xaml.cs` should stay limited to view lifecycle, dialog opening, Enter-key behavior, and scrolling. Do not move API calls, prompt construction, JSON serialization, or chat-state decisions back into code-behind.
 
-- **Duplicate data in worlds.json** → root cause was `ActiveWorld` / `ActiveCharacter` computed properties being serialized; fixed by adding `[JsonIgnore]`. Remaining list-level duplicates (characters, messages, custom fields, lore) are cleaned up by deduplication in `WorldManager.Load()`.
-- **`obj/` cache conflicts** → delete `obj/` and `bin/` folders, then rebuild
-- **`UnwrapInput()` must normalize `\r\n` → `\n`** before parsing wrapped messages
+## Data Model
+
+Current hierarchy:
+
+```text
+WorldStore
+  Worlds[]
+    Characters[]
+    UserPersonas[]
+    ChatSessions[]
+      Messages[]
+```
+
+Important model rules:
+
+- `Character` contains character configuration only.
+- `Character.DefaultScenario` is the migrated form of legacy `CharacterProfile.Situation`.
+- `ChatSession` owns `UserPersonaId`, optional `Scenario`, and `Messages`.
+- `ChatSession.Scenario` overrides `Character.DefaultScenario` only when non-empty.
+- `ChatMessage.Role` uses `ChatRole` enum.
+- User message `Content` must remain the raw user input. Provider-specific wrapping happens only when building the AI request.
+- `World` owns chat sessions for now. Do not add `IChatSessionRepository` unless chat storage is intentionally split later.
+
+## Persistence
+
+New data location:
+
+```text
+%LocalAppData%/AICharacterChat/
+  settings.json
+  data/worlds.json
+```
+
+Persistence classes:
+
+- `JsonWorldRepository`: loads/saves `WorldStore`
+- `JsonSettingsRepository`: loads/saves `AppSettings`
+- `LegacyDataMigrator`: converts legacy executable-adjacent `worlds.json`
+- `AppDataPaths`: centralizes paths
+
+Writes use a temporary file and replace/move into place. Loading must not deduplicate or mutate user data silently. Data changes should happen through explicit actions or migration.
+
+Writes are serialized through the shared JSON writer and use per-save temporary file names to avoid concurrent save collisions.
+
+## Anthropic
+
+Anthropic integration lives under `Infrastructure/AI/Anthropic`.
+
+- API key comes from `ANTHROPIC_API_KEY`
+- Models live in `AnthropicModelCatalog`
+- `AnthropicClient` implements `IChatModelClient`
+- Do not use `dynamic` response parsing
+- Do not call `HttpClient.DefaultRequestHeaders.Clear()` per request
+- API failures throw typed exceptions and must not be saved as assistant messages
+
+## Migration Rules
+
+Legacy conversion rules:
+
+```text
+CharacterProfile.Id -> Character.Id
+CharacterProfile.Situation -> Character.DefaultScenario
+CharacterProfile.ConversationHistory -> default ChatSession.Messages
+CharacterProfile.SelectedUserProfileId -> default ChatSession.UserPersonaId
+UserProfile -> UserPersona
+```
+
+For migrated sessions:
+
+```text
+ChatSession.Scenario = ""
+```
+
+Legacy wrapped user messages are unwrapped using the old `[현재 상황 서술]` format. Repeated messages are preserved; there is no `role + first 50 chars` deduplication in the new loader.
+
+## Tests
+
+The xUnit test suite covers:
+
+- `PromptBuilderTests`
+- `LoreMatcherTests`
+- `ChatServiceTests`
+- `JsonWorldRepositoryTests`
+- `LegacyDataMigratorTests`
+- `MainViewModelTests`
+
+`ChatServiceTests` use a fake `IChatModelClient`; tests must not call the real Anthropic API.
+
+## Remaining Notes
+
+- Do not upgrade to `net9.0-windows` as an intermediate target.
+- `net10.0-windows` can be revisited only after the .NET 10 SDK is installed.
+- `LoreBookWindow` and `UserProfileManagerWindow` delegate collection mutation and saving to ViewModels.
+- `CharacterSettingsWindow` still uses code-behind for WPF-only dynamic custom-field and relationship rows. Keep persistence and session state changes in ViewModels.

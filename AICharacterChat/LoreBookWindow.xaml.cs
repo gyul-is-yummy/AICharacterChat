@@ -1,35 +1,35 @@
+using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using AICharacterChat.Domain.Models;
+using AICharacterChat.Presentation.ViewModels;
 
 namespace AICharacterChat
 {
     public partial class LoreBookWindow : Window
     {
-        private readonly CharacterProfile _character;
-        private readonly WorldManager _manager;
-        private LoreEntry? _editingEntry; // null이면 새 항목 추가 모드
+        private readonly Character _character;
+        private readonly LoreBookViewModel _viewModel;
+        private LoreEntry? _editingEntry;
 
-        public LoreBookWindow(CharacterProfile character, WorldManager manager)
+        public LoreBookWindow(Character character, Func<Task> saveAsync)
         {
             InitializeComponent();
             _character = character;
-            _manager = manager;
-            Title = $"로어북 — {character.Name}";
+            _viewModel = new LoreBookViewModel(character, saveAsync);
+            Title = $"로어북 - {character.Name}";
             RefreshList();
         }
-
-        // ═══════════════════════════════════════════
-        // 목록 갱신
-        // ═══════════════════════════════════════════
 
         private void RefreshList()
         {
             LoreListPanel.Children.Clear();
 
-            if (_character.Lore.Count == 0)
+            if (_viewModel.Entries.Count == 0)
             {
                 LoreListPanel.Children.Add(new TextBlock
                 {
@@ -42,7 +42,7 @@ namespace AICharacterChat
                 return;
             }
 
-            foreach (var entry in _character.Lore)
+            foreach (var entry in _viewModel.Entries)
                 LoreListPanel.Children.Add(CreateEntryRow(entry));
         }
 
@@ -59,12 +59,11 @@ namespace AICharacterChat
             };
 
             var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 체크박스
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 텍스트
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 편집
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 삭제
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // 활성/비활성 체크박스
             var checkbox = new CheckBox
             {
                 IsChecked = entry.IsEnabled,
@@ -72,11 +71,10 @@ namespace AICharacterChat
                 Margin = new Thickness(0, 0, 10, 0),
                 Tag = entry.Id
             };
-            checkbox.Checked   += (s, e) => { entry.IsEnabled = true;  _manager.Save(); RefreshList(); };
-            checkbox.Unchecked += (s, e) => { entry.IsEnabled = false; _manager.Save(); RefreshList(); };
+            checkbox.Checked += async (_, _) => await ToggleEntryAsync(entry, true);
+            checkbox.Unchecked += async (_, _) => await ToggleEntryAsync(entry, false);
             Grid.SetColumn(checkbox, 0);
 
-            // 제목 + 키워드 미리보기
             var infoPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             infoPanel.Children.Add(new TextBlock
             {
@@ -99,7 +97,6 @@ namespace AICharacterChat
             });
             Grid.SetColumn(infoPanel, 1);
 
-            // 편집 버튼
             var editBtn = new Button
             {
                 Content = "✎",
@@ -116,7 +113,6 @@ namespace AICharacterChat
             editBtn.Click += EditEntry_Click;
             Grid.SetColumn(editBtn, 2);
 
-            // 삭제 버튼
             var deleteBtn = new Button
             {
                 Content = "🗑",
@@ -141,9 +137,12 @@ namespace AICharacterChat
             return border;
         }
 
-        // ═══════════════════════════════════════════
-        // 추가
-        // ═══════════════════════════════════════════
+        private async Task ToggleEntryAsync(LoreEntry entry, bool isEnabled)
+        {
+            entry.IsEnabled = isEnabled;
+            await _viewModel.ToggleAsync(entry, isEnabled);
+            RefreshList();
+        }
 
         private void AddEntryButton_Click(object sender, RoutedEventArgs e)
         {
@@ -156,15 +155,12 @@ namespace AICharacterChat
             TitleBox.Focus();
         }
 
-        // ═══════════════════════════════════════════
-        // 편집
-        // ═══════════════════════════════════════════
-
         private void EditEntry_Click(object sender, RoutedEventArgs e)
         {
             string id = (string)((Button)sender).Tag;
-            var entry = _character.Lore.FirstOrDefault(l => l.Id == id);
-            if (entry == null) return;
+            var entry = _viewModel.Entries.FirstOrDefault(l => l.Id == id);
+            if (entry == null)
+                return;
 
             _editingEntry = entry;
             EditPanelTitle.Text = "항목 편집";
@@ -175,25 +171,22 @@ namespace AICharacterChat
             TitleBox.Focus();
         }
 
-        // ═══════════════════════════════════════════
-        // 삭제
-        // ═══════════════════════════════════════════
-
-        private void DeleteEntry_Click(object sender, RoutedEventArgs e)
+        private async void DeleteEntry_Click(object sender, RoutedEventArgs e)
         {
             string id = (string)((Button)sender).Tag;
-            var entry = _character.Lore.FirstOrDefault(l => l.Id == id);
-            if (entry == null) return;
+            var entry = _viewModel.Entries.FirstOrDefault(l => l.Id == id);
+            if (entry == null)
+                return;
 
             var result = MessageBox.Show(
                 $"'{entry.Title}' 항목을 삭제할까요?",
                 "로어 삭제",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes)
+                return;
 
-            _character.Lore.Remove(entry);
-            _manager.Save();
+            await _viewModel.DeleteAsync(entry);
 
             if (_editingEntry?.Id == id)
                 HideEditPanel();
@@ -201,11 +194,7 @@ namespace AICharacterChat
             RefreshList();
         }
 
-        // ═══════════════════════════════════════════
-        // 편집 패널 저장 / 취소
-        // ═══════════════════════════════════════════
-
-        private void SaveEditButton_Click(object sender, RoutedEventArgs e)
+        private async void SaveEditButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TitleBox.Text))
             {
@@ -213,30 +202,7 @@ namespace AICharacterChat
                 return;
             }
 
-            var keywords = KeywordsBox.Text
-                .Split(',')
-                .Select(k => k.Trim())
-                .Where(k => !string.IsNullOrEmpty(k))
-                .ToList();
-
-            if (_editingEntry == null)
-            {
-                _character.Lore.Add(new LoreEntry
-                {
-                    Title    = TitleBox.Text.Trim(),
-                    Keywords = keywords,
-                    Content  = ContentBox.Text.Trim(),
-                    IsEnabled = true
-                });
-            }
-            else
-            {
-                _editingEntry.Title    = TitleBox.Text.Trim();
-                _editingEntry.Keywords = keywords;
-                _editingEntry.Content  = ContentBox.Text.Trim();
-            }
-
-            _manager.Save();
+            await _viewModel.SaveEntryAsync(_editingEntry, TitleBox.Text, KeywordsBox.Text, ContentBox.Text);
             HideEditPanel();
             RefreshList();
         }

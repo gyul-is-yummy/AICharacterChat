@@ -1,5 +1,6 @@
 # 민감 파일 및 개인 데이터
 worlds.json
+settings.json
 .claude/
 
 ## Ignore Visual Studio temporary files, build results, and

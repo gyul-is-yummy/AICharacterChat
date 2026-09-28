@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace AICharacterChat
+namespace AICharacterChat.Domain.Models
 {
     public class LoreEntry
     {

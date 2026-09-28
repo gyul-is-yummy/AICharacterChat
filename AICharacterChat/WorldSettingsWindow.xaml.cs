@@ -1,14 +1,18 @@
-﻿using System.Windows;
+using System.Windows;
+using AICharacterChat.Domain.Models;
 
 namespace AICharacterChat
 {
     public partial class WorldSettingsWindow : Window
     {
-        public WorldProfile ResultWorld { get; private set; }
+        private readonly World _current;
 
-        public WorldSettingsWindow(WorldProfile current)
+        public World ResultWorld { get; private set; } = new();
+
+        public WorldSettingsWindow(World current)
         {
             InitializeComponent();
+            _current = current;
             NameBox.Text = current.Name;
             GenreBox.Text = current.Genre;
             EraBox.Text = current.Era;
@@ -23,13 +27,19 @@ namespace AICharacterChat
                 MessageBox.Show("세계관 이름을 입력해주세요.", "알림");
                 return;
             }
-            ResultWorld = new WorldProfile
+
+            ResultWorld = new World
             {
+                Id = _current.Id,
                 Name = NameBox.Text.Trim(),
                 Genre = GenreBox.Text.Trim(),
                 Era = EraBox.Text.Trim(),
                 Description = DescriptionBox.Text.Trim(),
-                Rules = RulesBox.Text.Trim()
+                Rules = RulesBox.Text.Trim(),
+                ActiveCharacterId = _current.ActiveCharacterId,
+                Characters = _current.Characters,
+                UserPersonas = _current.UserPersonas,
+                ChatSessions = _current.ChatSessions
             };
             DialogResult = true;
             Close();
