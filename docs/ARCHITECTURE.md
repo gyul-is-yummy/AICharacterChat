@@ -35,6 +35,7 @@ raw user input
    -> LoreMatcher, using the current raw user input
    -> PromptBuilder
    -> RecentMessageSelector
+   -> HistoricalContextBuilder
    -> provider-independent request messages, with user role messages wrapped for the request
 -> IChatModelClient.SendAsync
 -> on success, append Assistant ChatMessage
@@ -46,6 +47,8 @@ On failure or cancellation, the temporary user message is removed, no assistant 
 If the provider succeeds but repository save fails or is canceled, `ChatService` rolls back every message it added during the send operation.
 
 `ChatSession.Messages` keeps the full conversation history. `RecentMessageSelector` only limits the messages sent in the AI request. It does not delete, summarize, or persist a reduced history.
+
+`ChatSession.Summaries` stores user-managed `ConversationSummary` ranges. `HistoricalContextBuilder` uses summaries only when their full range is outside the actual recent selection; otherwise the historical portion remains raw. Historical Context is rendered on demand and is not saved.
 
 ## Current Boundaries
 

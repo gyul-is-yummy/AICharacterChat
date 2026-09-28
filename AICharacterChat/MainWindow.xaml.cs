@@ -29,7 +29,12 @@ namespace AICharacterChat
             var promptBuilder = new PromptBuilder();
             var loreMatcher = new LoreMatcher();
             var recentMessageSelector = new RecentMessageSelector();
-            var contextBuilder = new ContextBuilder(promptBuilder, loreMatcher, recentMessageSelector);
+            var historicalContextBuilder = new HistoricalContextBuilder();
+            var contextBuilder = new ContextBuilder(
+                promptBuilder,
+                loreMatcher,
+                recentMessageSelector,
+                historicalContextBuilder);
             var chatService = new ChatService(
                 chatClient,
                 worldRepository,

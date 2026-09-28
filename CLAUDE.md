@@ -44,6 +44,7 @@ MainViewModel
    -> LoreMatcher
    -> PromptBuilder
    -> RecentMessageSelector
+   -> HistoricalContextBuilder
 -> IChatModelClient
 -> IWorldRepository
 ```
@@ -61,6 +62,7 @@ WorldStore
     UserPersonas[]
     ChatSessions[]
       Messages[]
+      Summaries[]
 ```
 
 Important model rules:
@@ -73,6 +75,7 @@ Important model rules:
 - User message `Content` must remain the raw user input. Provider-specific wrapping happens only when building the AI request.
 - `World` owns chat sessions for now. Do not add `IChatSessionRepository` unless chat storage is intentionally split later.
 - `ChatSession.Messages` stores the full conversation history. AI requests use a recent message window built by `RecentMessageSelector`; the recent window is not persisted.
+- `ChatSession.Summaries` stores user-managed `ConversationSummary` ranges. Summaries reference message ids and never delete or mutate source messages.
 - Current recent message limit: `RecentMessageSelector.DefaultMaxRecentMessages = 20`.
 
 ## Persistence
@@ -115,8 +118,9 @@ Context assembly lives in `Application/Context`.
 - `PromptBuilder` still owns system prompt text.
 - `LoreMatcher` still matches only the current raw user input.
 - `RecentMessageSelector` chooses recent messages by count only; it does not count tokens or summarize history.
+- `HistoricalContextBuilder` renders older context from summaries and unsummarized raw messages, using the actual recent selection as the boundary.
 - User role messages included in the request are wrapped at request-conversion time. Domain `ChatMessage.Content` must remain raw.
-- Summary memory, embeddings, token budgets, and semantic retrieval are not implemented.
+- AI summary generation, summary UI, embeddings, token budgets, and semantic retrieval are not implemented.
 
 ## Migration Rules
 
@@ -146,6 +150,9 @@ The xUnit test suite covers:
 - `LoreMatcherTests`
 - `RecentMessageSelectorTests`
 - `ContextBuilderTests`
+- `ConversationSummaryServiceTests`
+- `HistoricalContextBuilderTests`
+- `SummaryPersistenceTests`
 - `ChatServiceTests`
 - `JsonWorldRepositoryTests`
 - `LegacyDataMigratorTests`

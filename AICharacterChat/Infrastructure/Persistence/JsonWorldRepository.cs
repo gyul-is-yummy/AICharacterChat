@@ -108,6 +108,12 @@ namespace AICharacterChat.Infrastructure.Persistence
                 if (world.UserPersonas.Count == 0)
                     world.UserPersonas.Add(new UserPersona { Name = "나" });
 
+                foreach (var session in world.ChatSessions)
+                {
+                    session.Messages ??= new();
+                    session.Summaries ??= new();
+                }
+
                 if (world.Characters.Count == 0)
                     continue;
 

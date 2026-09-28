@@ -11,15 +11,18 @@ namespace AICharacterChat.Application.Context
         private readonly PromptBuilder _promptBuilder;
         private readonly LoreMatcher _loreMatcher;
         private readonly RecentMessageSelector _recentMessageSelector;
+        private readonly HistoricalContextBuilder _historicalContextBuilder;
 
         public ContextBuilder(
             PromptBuilder promptBuilder,
             LoreMatcher loreMatcher,
-            RecentMessageSelector recentMessageSelector)
+            RecentMessageSelector recentMessageSelector,
+            HistoricalContextBuilder historicalContextBuilder)
         {
             _promptBuilder = promptBuilder;
             _loreMatcher = loreMatcher;
             _recentMessageSelector = recentMessageSelector;
+            _historicalContextBuilder = historicalContextBuilder;
         }
 
         public BuiltChatContext Build(
@@ -33,12 +36,17 @@ namespace AICharacterChat.Application.Context
                 ?? world.UserPersonas.FirstOrDefault();
 
             var matchingLore = _loreMatcher.Match(character.Lore, rawUserInput);
-            var selectedMessages = _recentMessageSelector.Select(session.Messages);
+            var recentMessages = _recentMessageSelector.Select(session.Messages);
+            var historicalContext = _historicalContextBuilder.Build(session, recentMessages);
+            string basePrompt = _promptBuilder.Build(world, character, userPersona, session, matchingLore);
+            string systemPrompt = string.IsNullOrWhiteSpace(historicalContext.Text)
+                ? basePrompt
+                : $"{basePrompt}\n\n{historicalContext.Text}";
 
             return new BuiltChatContext
             {
-                SystemPrompt = _promptBuilder.Build(world, character, userPersona, session, matchingLore),
-                Messages = selectedMessages
+                SystemPrompt = systemPrompt,
+                Messages = recentMessages
                     .Select(message => new ChatCompletionMessage
                     {
                         Role = message.Role,
@@ -46,7 +54,9 @@ namespace AICharacterChat.Application.Context
                             ? WrapUserInput(message.Content, character.Name)
                             : message.Content
                     })
-                    .ToList()
+                    .ToList(),
+                UnsummarizedOldMessageCount = historicalContext.UnsummarizedOldMessageCount,
+                HasOldUnsummarizedWarning = historicalContext.HasOldUnsummarizedWarning
             };
         }
 

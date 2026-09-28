@@ -119,7 +119,11 @@ namespace AICharacterChat.Tests
             new(client, repository, CreateContextBuilder());
 
         private static ContextBuilder CreateContextBuilder(int maxRecentMessages = 20) =>
-            new(new PromptBuilder(), new LoreMatcher(), new RecentMessageSelector(maxRecentMessages));
+            new(
+                new PromptBuilder(),
+                new LoreMatcher(),
+                new RecentMessageSelector(maxRecentMessages),
+                new HistoricalContextBuilder());
 
         private static (WorldStore Store, World World, Character Character, ChatSession Session) CreateContext()
         {

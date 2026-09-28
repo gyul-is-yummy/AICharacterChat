@@ -11,5 +11,6 @@ namespace AICharacterChat.Domain.Models
         public string UserPersonaId { get; set; } = "";
         public string Scenario { get; set; } = "";
         public List<ChatMessage> Messages { get; set; } = new();
+        public List<ConversationSummary> Summaries { get; set; } = new();
     }
 }

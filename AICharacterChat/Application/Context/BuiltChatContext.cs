@@ -7,5 +7,7 @@ namespace AICharacterChat.Application.Context
     {
         public string SystemPrompt { get; init; } = "";
         public IReadOnlyList<ChatCompletionMessage> Messages { get; init; } = [];
+        public int UnsummarizedOldMessageCount { get; init; }
+        public bool HasOldUnsummarizedWarning { get; init; }
     }
 }

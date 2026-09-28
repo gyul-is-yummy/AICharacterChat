@@ -18,6 +18,7 @@ ChatService
    -> LoreMatcher.Match(character.Lore, rawUserInput)
    -> PromptBuilder.Build(...)
    -> RecentMessageSelector.Select(session.Messages)
+   -> HistoricalContextBuilder.Build(session, recentMessages)
    -> ChatMessage values are converted to ChatCompletionMessage values
 -> ChatCompletionRequest
 -> IChatModelClient
@@ -43,6 +44,22 @@ Selection policy:
 - The source `ChatSession.Messages` and each `ChatMessage` are not modified.
 - When truncation occurs and the selected window starts with one or more `Assistant` messages, those leading assistant messages are removed if the window contains a later `User` message.
 - If truncated data contains no `User` message at all, the selected window is kept as-is to avoid deleting abnormal but potentially valuable data.
+
+## Historical Context
+
+Historical Context is computed at request time. It is not stored in Domain or JSON.
+
+`ContextBuilder` runs `RecentMessageSelector` once, then shares that exact recent selection with `HistoricalContextBuilder` and the request message conversion step. The first actual recent message defines the historical boundary, so assistant messages trimmed from the recent window are preserved as historical raw messages.
+
+Historical Context is appended after the base system prompt. It contains conversation history before the actual recent selection:
+
+- Summary ranges fully outside the recent selection are rendered as summary blocks.
+- Gaps without summaries are rendered as raw historical message blocks.
+- Summary ranges that overlap recent messages are not used for compression yet.
+- Raw historical user messages are not wrapped with `[현재 상황 서술]`.
+- Recent user messages keep the existing request wrapping.
+
+`HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount`. The warning threshold is currently 20 raw historical messages, but no WPF warning UI exists in 3-A.
 
 ## Lore
 
@@ -73,6 +90,6 @@ This wrapping happens only on the new `ChatCompletionMessage` values. It must no
 
 ## Future Extension
 
-Summary Memory is not implemented.
+AI Summary generation and Summary Memory UI are not implemented.
 
 If summary memory is added later, `ContextBuilder` is the likely integration point: it can combine a future summary with the existing system prompt, relevant lore, and recent message window before creating the final request context.

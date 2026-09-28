@@ -63,7 +63,11 @@ namespace AICharacterChat.Tests
                 new ChatService(
                     new FakeChatModelClient { Reply = "답" },
                     repository,
-                    new ContextBuilder(new PromptBuilder(), new LoreMatcher(), new RecentMessageSelector())));
+                    new ContextBuilder(
+                        new PromptBuilder(),
+                        new LoreMatcher(),
+                        new RecentMessageSelector(),
+                        new HistoricalContextBuilder())));
         }
 
         private class MemoryWorldRepository : IWorldRepository
