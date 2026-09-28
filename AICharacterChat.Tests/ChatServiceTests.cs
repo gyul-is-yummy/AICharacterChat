@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using AICharacterChat.Application.Chat;
+using AICharacterChat.Application.Context;
 using AICharacterChat.Domain.Enums;
 using AICharacterChat.Domain.Models;
 using Xunit;
@@ -90,8 +91,35 @@ namespace AICharacterChat.Tests
             Assert.Equal(before, session.Messages);
         }
 
+        [Fact]
+        public async Task LongConversationKeepsFullHistoryButSendsRecentWindow()
+        {
+            var (store, world, character, session) = CreateContext();
+            for (int i = 1; i <= 30; i++)
+                session.Messages.Add(new ChatMessage(ChatRole.User, i.ToString()));
+            var client = new FakeChatModelClient { Reply = "답변" };
+            var repository = new FakeWorldRepository();
+            var service = CreateService(client, repository);
+
+            var result = await service.SendAsync(store, world, character, session, "현재 입력", "model");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(32, session.Messages.Count);
+            Assert.Equal("1", session.Messages[0].Content);
+            Assert.Equal("현재 입력", session.Messages[^2].Content);
+            Assert.Equal("답변", session.Messages[^1].Content);
+            Assert.Equal(20, client.LastRequest!.Messages.Count);
+            Assert.Contains("12", client.LastRequest.Messages[0].Content);
+            Assert.Contains("현재 입력", client.LastRequest.Messages[^1].Content);
+            Assert.DoesNotContain(session.Messages, message => message.Content.Contains("[현재 상황 서술]"));
+            Assert.Equal(1, repository.SaveCount);
+        }
+
         private static ChatService CreateService(FakeChatModelClient client, FakeWorldRepository repository) =>
-            new(client, repository, new PromptBuilder(), new LoreMatcher());
+            new(client, repository, CreateContextBuilder());
+
+        private static ContextBuilder CreateContextBuilder(int maxRecentMessages = 20) =>
+            new(new PromptBuilder(), new LoreMatcher(), new RecentMessageSelector(maxRecentMessages));
 
         private static (WorldStore Store, World World, Character Character, ChatSession Session) CreateContext()
         {

@@ -8,6 +8,7 @@ Domain
   Models
 Application
   Chat
+  Context
   Interfaces
   Models
 Infrastructure
@@ -21,6 +22,7 @@ Presentation
 
 - `Domain`: data and domain objects only.
 - `Application`: provider-independent chat flow, prompt creation, lore matching, and interfaces.
+- `Application/Context`: provider-independent request context assembly and recent message selection.
 - `Infrastructure`: Anthropic HTTP client and JSON file persistence.
 - `Presentation`: WPF windows and view models.
 
@@ -29,9 +31,11 @@ Presentation
 ```text
 raw user input
 -> temporary User ChatMessage in ChatSession
--> LoreMatcher
--> PromptBuilder
--> provider request messages, with user input wrapped for Anthropic
+-> ContextBuilder
+   -> LoreMatcher, using the current raw user input
+   -> PromptBuilder
+   -> RecentMessageSelector
+   -> provider-independent request messages, with user role messages wrapped for the request
 -> IChatModelClient.SendAsync
 -> on success, append Assistant ChatMessage
 -> save WorldStore once
@@ -40,6 +44,8 @@ raw user input
 On failure or cancellation, the temporary user message is removed, no assistant message is added, and the repository is not saved.
 
 If the provider succeeds but repository save fails or is canceled, `ChatService` rolls back every message it added during the send operation.
+
+`ChatSession.Messages` keeps the full conversation history. `RecentMessageSelector` only limits the messages sent in the AI request. It does not delete, summarize, or persist a reduced history.
 
 ## Current Boundaries
 

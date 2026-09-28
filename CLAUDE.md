@@ -25,6 +25,7 @@ AICharacterChat/
     Models/
   Application/
     Chat/
+    Context/
     Interfaces/
     Models/
   Infrastructure/
@@ -39,8 +40,10 @@ Core flow:
 ```text
 MainViewModel
 -> ChatService
--> LoreMatcher
--> PromptBuilder
+-> ContextBuilder
+   -> LoreMatcher
+   -> PromptBuilder
+   -> RecentMessageSelector
 -> IChatModelClient
 -> IWorldRepository
 ```
@@ -69,6 +72,8 @@ Important model rules:
 - `ChatMessage.Role` uses `ChatRole` enum.
 - User message `Content` must remain the raw user input. Provider-specific wrapping happens only when building the AI request.
 - `World` owns chat sessions for now. Do not add `IChatSessionRepository` unless chat storage is intentionally split later.
+- `ChatSession.Messages` stores the full conversation history. AI requests use a recent message window built by `RecentMessageSelector`; the recent window is not persisted.
+- Current recent message limit: `RecentMessageSelector.DefaultMaxRecentMessages = 20`.
 
 ## Persistence
 
@@ -102,6 +107,17 @@ Anthropic integration lives under `Infrastructure/AI/Anthropic`.
 - Do not call `HttpClient.DefaultRequestHeaders.Clear()` per request
 - API failures throw typed exceptions and must not be saved as assistant messages
 
+## Context Building
+
+Context assembly lives in `Application/Context`.
+
+- `ContextBuilder` creates provider-independent `BuiltChatContext` values containing the system prompt and request messages.
+- `PromptBuilder` still owns system prompt text.
+- `LoreMatcher` still matches only the current raw user input.
+- `RecentMessageSelector` chooses recent messages by count only; it does not count tokens or summarize history.
+- User role messages included in the request are wrapped at request-conversion time. Domain `ChatMessage.Content` must remain raw.
+- Summary memory, embeddings, token budgets, and semantic retrieval are not implemented.
+
 ## Migration Rules
 
 Legacy conversion rules:
@@ -128,6 +144,8 @@ The xUnit test suite covers:
 
 - `PromptBuilderTests`
 - `LoreMatcherTests`
+- `RecentMessageSelectorTests`
+- `ContextBuilderTests`
 - `ChatServiceTests`
 - `JsonWorldRepositoryTests`
 - `LegacyDataMigratorTests`

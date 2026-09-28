@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using AICharacterChat.Application.Chat;
+using AICharacterChat.Application.Context;
 using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Models;
 using AICharacterChat.Domain.Enums;
@@ -59,7 +60,10 @@ namespace AICharacterChat.Tests
                 repository,
                 new MemorySettingsRepository(),
                 new MemoryModelCatalog(),
-                new ChatService(new FakeChatModelClient { Reply = "답" }, repository, new PromptBuilder(), new LoreMatcher()));
+                new ChatService(
+                    new FakeChatModelClient { Reply = "답" },
+                    repository,
+                    new ContextBuilder(new PromptBuilder(), new LoreMatcher(), new RecentMessageSelector())));
         }
 
         private class MemoryWorldRepository : IWorldRepository

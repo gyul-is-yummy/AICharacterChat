@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using AICharacterChat.Application.Chat;
+using AICharacterChat.Application.Context;
 using AICharacterChat.Domain.Models;
 using AICharacterChat.Infrastructure.AI.Anthropic;
 using AICharacterChat.Infrastructure.Persistence;
@@ -25,11 +26,14 @@ namespace AICharacterChat
             var settingsRepository = new JsonSettingsRepository(paths);
             var modelCatalog = new AnthropicModelCatalog();
             var chatClient = new AnthropicClient(new HttpClient());
+            var promptBuilder = new PromptBuilder();
+            var loreMatcher = new LoreMatcher();
+            var recentMessageSelector = new RecentMessageSelector();
+            var contextBuilder = new ContextBuilder(promptBuilder, loreMatcher, recentMessageSelector);
             var chatService = new ChatService(
                 chatClient,
                 worldRepository,
-                new PromptBuilder(),
-                new LoreMatcher());
+                contextBuilder);
 
             _viewModel = new MainViewModel(worldRepository, settingsRepository, modelCatalog, chatService);
             _viewModel.Messages.CollectionChanged += (_, _) => ChatScrollViewer.ScrollToBottom();

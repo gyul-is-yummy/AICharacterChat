@@ -1,7 +1,7 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AICharacterChat.Application.Context;
 using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Models;
 using AICharacterChat.Domain.Enums;
@@ -13,19 +13,16 @@ namespace AICharacterChat.Application.Chat
     {
         private readonly IChatModelClient _chatModelClient;
         private readonly IWorldRepository _worldRepository;
-        private readonly PromptBuilder _promptBuilder;
-        private readonly LoreMatcher _loreMatcher;
+        private readonly ContextBuilder _contextBuilder;
 
         public ChatService(
             IChatModelClient chatModelClient,
             IWorldRepository worldRepository,
-            PromptBuilder promptBuilder,
-            LoreMatcher loreMatcher)
+            ContextBuilder contextBuilder)
         {
             _chatModelClient = chatModelClient;
             _worldRepository = worldRepository;
-            _promptBuilder = promptBuilder;
-            _loreMatcher = loreMatcher;
+            _contextBuilder = contextBuilder;
         }
 
         public async Task<ChatServiceResult> SendAsync(
@@ -46,25 +43,13 @@ namespace AICharacterChat.Application.Chat
 
             try
             {
-                var userPersona = world.UserPersonas
-                    .FirstOrDefault(u => u.Id == session.UserPersonaId)
-                    ?? world.UserPersonas.FirstOrDefault();
-
-                var matchingLore = _loreMatcher.Match(character.Lore, rawUserInput);
+                var context = _contextBuilder.Build(world, character, session, rawUserInput);
                 var request = new ChatCompletionRequest
                 {
                     Model = model,
                     MaxTokens = 1024,
-                    SystemPrompt = _promptBuilder.Build(world, character, userPersona, session, matchingLore),
-                    Messages = session.Messages
-                        .Select(message => new ChatCompletionMessage
-                        {
-                            Role = message.Role,
-                            Content = message.Role == ChatRole.User
-                                ? WrapUserInput(message.Content, character.Name)
-                                : message.Content
-                        })
-                        .ToList()
+                    SystemPrompt = context.SystemPrompt,
+                    Messages = context.Messages
                 };
 
                 string reply = await _chatModelClient.SendAsync(request, cancellationToken);
@@ -88,17 +73,6 @@ namespace AICharacterChat.Application.Chat
         {
             while (session.Messages.Count > originalMessageCount)
                 session.Messages.RemoveAt(session.Messages.Count - 1);
-        }
-
-        private static string WrapUserInput(string userInput, string characterName)
-        {
-            return $"""
-                [현재 상황 서술]
-                {userInput}
-
-                위 상황에서 {characterName}으로서 반응해주세요.
-                행동 묘사와 대사를 함께 포함하여 소설 문체로 답하세요.
-                """;
         }
     }
 }
