@@ -45,6 +45,7 @@ Summary ranges must refer to messages in the same `ChatSession.Messages` list.
 
 Validation requires:
 
+- Summary id is not already used in the same session.
 - Start message exists.
 - End message exists.
 - Start index is before or equal to end index.
@@ -85,9 +86,19 @@ Historical Context contains messages outside the actual recent selection.
 
 If a summary range is fully outside the recent selection, that range is rendered as a summary. If the summary overlaps recent messages, it is not used for compression yet, and the historical part of that range remains raw.
 
+If persisted or externally edited summary data is invalid at render time, `HistoricalContextBuilder` does not mutate or delete it. Missing start/end messages, reversed ranges, and overlapping summary ranges are ignored for compression, and the covered historical messages fall back to raw rendering without message loss or duplication.
+
+Summary titles, summary section values, and raw historical message contents are escaped before being inserted into the historical context text.
+
 Raw historical messages are rendered as past reference material and do not use the current user message wrapping format. Recent user messages still use the existing `[현재 상황 서술]` request wrapping.
 
 The historical renderer interleaves summary blocks and raw message blocks in conversation order.
+
+## Clear Chat
+
+Clear Chat clears both `ChatSession.Messages` and `ChatSession.Summaries` for the current character session.
+
+If saving fails, the in-memory messages and summaries are restored and the failure is propagated instead of leaving a partially cleared session.
 
 ## Old Unsummarized Count
 

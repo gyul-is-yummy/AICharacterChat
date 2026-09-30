@@ -325,9 +325,22 @@ namespace AICharacterChat.Presentation.ViewModels
             if (session == null)
                 return;
 
-            session.Messages.Clear();
-            RefreshMessages();
-            await SaveAsync();
+            var originalMessages = session.Messages.ToList();
+            var originalSummaries = session.Summaries.ToList();
+            try
+            {
+                session.Messages.Clear();
+                session.Summaries.Clear();
+                RefreshMessages();
+                await SaveAsync();
+            }
+            catch
+            {
+                session.Messages = originalMessages;
+                session.Summaries = originalSummaries;
+                RefreshMessages();
+                throw;
+            }
         }
 
         private ChatSession EnsureSession(World world, Character character, string? requestedUserPersonaId = null)

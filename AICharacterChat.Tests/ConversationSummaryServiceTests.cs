@@ -142,6 +142,20 @@ namespace AICharacterChat.Tests
         }
 
         [Fact]
+        public void AddSummaryWithExistingIdIsRejected()
+        {
+            var session = CreateSession(5);
+            var service = new ConversationSummaryService();
+            var summary = CreateSummary(session, 1, 2);
+            service.AddSummary(session, summary);
+
+            var result = service.AddSummary(session, summary);
+
+            Assert.False(result.IsSuccess);
+            Assert.Single(session.Summaries);
+        }
+
+        [Fact]
         public void EmptyTitleRejected()
         {
             var session = CreateSession(3);

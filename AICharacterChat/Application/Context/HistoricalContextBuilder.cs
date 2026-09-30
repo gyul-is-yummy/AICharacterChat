@@ -75,7 +75,7 @@ namespace AICharacterChat.Application.Context
             ChatSession session,
             int historicalEndExclusive)
         {
-            return session.Summaries
+            var ranges = session.Summaries
                 .Select(summary => CreateSummaryRange(session.Messages, summary))
                 .Where(range => range != null)
                 .Cast<SummaryRange>()
@@ -83,6 +83,26 @@ namespace AICharacterChat.Application.Context
                                 range.EndIndex < historicalEndExclusive &&
                                 range.StartIndex <= range.EndIndex)
                 .OrderBy(range => range.StartIndex)
+                .ToList();
+
+            if (ranges.Count <= 1)
+                return ranges;
+
+            var conflicting = new bool[ranges.Count];
+            for (int i = 0; i < ranges.Count; i++)
+            {
+                for (int j = i + 1; j < ranges.Count; j++)
+                {
+                    if (Overlaps(ranges[i], ranges[j]))
+                    {
+                        conflicting[i] = true;
+                        conflicting[j] = true;
+                    }
+                }
+            }
+
+            return ranges
+                .Where((_, index) => !conflicting[index])
                 .ToList();
         }
 
@@ -114,22 +134,22 @@ namespace AICharacterChat.Application.Context
             builder.AppendLine();
             builder.AppendLine($"<summary title=\"{Escape(summary.Title)}\">");
             builder.AppendLine("[현재 상황]");
-            builder.AppendLine(RenderSection(summary.CurrentSituation));
+            builder.AppendLine(Escape(RenderSection(summary.CurrentSituation)));
             builder.AppendLine();
             builder.AppendLine("[주요 사건]");
-            builder.AppendLine(RenderSection(summary.KeyEvents));
+            builder.AppendLine(Escape(RenderSection(summary.KeyEvents)));
             builder.AppendLine();
             builder.AppendLine("[관계 변화]");
-            builder.AppendLine(RenderSection(summary.RelationshipChanges));
+            builder.AppendLine(Escape(RenderSection(summary.RelationshipChanges)));
             builder.AppendLine();
             builder.AppendLine("[약속 / 중요한 발언]");
-            builder.AppendLine(RenderSection(summary.PromisesAndImportantStatements));
+            builder.AppendLine(Escape(RenderSection(summary.PromisesAndImportantStatements)));
             builder.AppendLine();
             builder.AppendLine("[미해결 사항]");
-            builder.AppendLine(RenderSection(summary.UnresolvedMatters));
+            builder.AppendLine(Escape(RenderSection(summary.UnresolvedMatters)));
             builder.AppendLine();
             builder.AppendLine("[지속 상태]");
-            builder.AppendLine(RenderSection(summary.PersistentState));
+            builder.AppendLine(Escape(RenderSection(summary.PersistentState)));
             builder.AppendLine("</summary>");
         }
 
@@ -161,6 +181,10 @@ namespace AICharacterChat.Application.Context
 
         private static string Escape(string? value) =>
             WebUtility.HtmlEncode(value ?? "");
+
+        private static bool Overlaps(SummaryRange left, SummaryRange right) =>
+            left.StartIndex <= right.EndIndex &&
+            right.StartIndex <= left.EndIndex;
 
         private sealed record SummaryRange(
             ConversationSummary Summary,

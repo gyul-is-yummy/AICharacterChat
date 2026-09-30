@@ -56,8 +56,14 @@ Historical Context is appended after the base system prompt. It contains convers
 - Summary ranges fully outside the recent selection are rendered as summary blocks.
 - Gaps without summaries are rendered as raw historical message blocks.
 - Summary ranges that overlap recent messages are not used for compression yet.
+- Invalid persisted summary ranges are not used for compression.
+- Overlapping persisted summary ranges are not used for compression.
 - Raw historical user messages are not wrapped with `[현재 상황 서술]`.
 - Recent user messages keep the existing request wrapping.
+
+Invalid or overlapping summaries are not repaired, deleted, or rewritten by `HistoricalContextBuilder`. Their messages fall back to raw historical rendering for that request, preserving chronological order without dropping or duplicating messages.
+
+All user/AI data values inserted into Historical Context are escaped. This includes summary titles, the six summary section values, and raw historical message contents.
 
 `HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount`. The warning threshold is currently 20 raw historical messages, but no WPF warning UI exists in 3-A.
 

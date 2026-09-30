@@ -11,6 +11,9 @@ namespace AICharacterChat.Application.Summaries
 
         public SummaryServiceResult AddSummary(ChatSession session, ConversationSummary summary)
         {
+            if (session.Summaries.Any(existing => existing.Id == summary.Id))
+                return SummaryServiceResult.Failure("이미 같은 ID의 요약이 존재합니다.");
+
             var validation = ValidateSummary(session, summary);
             if (!validation.IsSuccess)
                 return validation;
@@ -107,7 +110,7 @@ namespace AICharacterChat.Application.Summaries
             if (!titleValidation.IsSuccess)
                 return titleValidation;
 
-            return ValidateRange(session, summary.StartMessageId, summary.EndMessageId, summary.Id);
+            return ValidateRange(session, summary.StartMessageId, summary.EndMessageId);
         }
 
         private static SummaryServiceResult ValidateTitle(string title)

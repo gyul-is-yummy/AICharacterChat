@@ -195,6 +195,48 @@ namespace AICharacterChat.Tests
         }
 
         [Fact]
+        public void SummarySectionClosingHistoricalContextTagIsEscaped()
+        {
+            var session = CreateNumberedSession(3);
+            var summary = CreateSummary(session, 1, 1, "섹션");
+            summary.CurrentSituation = "</historical_context>";
+            session.Summaries.Add(summary);
+            var recent = session.Messages.Skip(1).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.Contains("&lt;/historical_context&gt;", result.Text);
+            Assert.DoesNotContain("[현재 상황]\n</historical_context>", result.Text.Replace("\r\n", "\n"));
+            Assert.Equal("</historical_context>", summary.CurrentSituation);
+        }
+
+        [Fact]
+        public void SummaryTitleMarkupIsEscaped()
+        {
+            var session = CreateNumberedSession(3);
+            session.Summaries.Add(CreateSummary(session, 1, 1, "<summary>&\""));
+            var recent = session.Messages.Skip(1).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.Contains("title=\"&lt;summary&gt;&amp;&quot;\"", result.Text);
+            Assert.DoesNotContain("title=\"<summary>&\"\"", result.Text);
+        }
+
+        [Fact]
+        public void HistoricalRawMarkupIsEscaped()
+        {
+            var session = CreateSession(ChatRole.User, ChatRole.User);
+            session.Messages[0].Content = "<raw>&\"";
+            var recent = session.Messages.Skip(1).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.Contains("&lt;raw&gt;&amp;&quot;", result.Text);
+            Assert.DoesNotContain("<raw>&\"", result.Text);
+        }
+
+        [Fact]
         public void UnsummarizedOldMessageCountIsCorrect()
         {
             var session = CreateNumberedSession(30);
@@ -217,6 +259,88 @@ namespace AICharacterChat.Tests
 
             Assert.Equal(20, result.UnsummarizedOldMessageCount);
             Assert.True(result.HasOldUnsummarizedWarning);
+        }
+
+        [Fact]
+        public void MissingStartSummaryFallsBackToRaw()
+        {
+            var session = CreateNumberedSession(3);
+            var summary = CreateSummary(session, 1, 2, "깨진 시작");
+            summary.StartMessageId = Guid.NewGuid();
+            session.Summaries.Add(summary);
+            var recent = session.Messages.Skip(2).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.DoesNotContain("title=\"깨진 시작\"", result.Text);
+            Assert.Contains("1", result.Text);
+            Assert.Contains("2", result.Text);
+        }
+
+        [Fact]
+        public void MissingEndSummaryFallsBackToRaw()
+        {
+            var session = CreateNumberedSession(3);
+            var summary = CreateSummary(session, 1, 2, "깨진 끝");
+            summary.EndMessageId = Guid.NewGuid();
+            session.Summaries.Add(summary);
+            var recent = session.Messages.Skip(2).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.DoesNotContain("title=\"깨진 끝\"", result.Text);
+            Assert.Contains("1", result.Text);
+            Assert.Contains("2", result.Text);
+        }
+
+        [Fact]
+        public void ReversedRangeSummaryFallsBackToRaw()
+        {
+            var session = CreateNumberedSession(3);
+            var summary = CreateSummary(session, 2, 1, "역방향");
+            session.Summaries.Add(summary);
+            var recent = session.Messages.Skip(2).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.DoesNotContain("title=\"역방향\"", result.Text);
+            Assert.Contains("1", result.Text);
+            Assert.Contains("2", result.Text);
+        }
+
+        [Fact]
+        public void OverlappingSummariesFallBackToRawWithoutDuplication()
+        {
+            var session = CreateLabeledSession(25);
+            session.Summaries.Add(CreateSummary(session, 1, 10, "A"));
+            session.Summaries.Add(CreateSummary(session, 8, 20, "B"));
+            var recent = session.Messages.Skip(20).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.DoesNotContain("title=\"A\"", result.Text);
+            Assert.DoesNotContain("title=\"B\"", result.Text);
+            Assert.Equal(20, result.UnsummarizedOldMessageCount);
+            Assert.Equal(1, CountOccurrences(result.Text, "message-08"));
+            Assert.Equal(1, CountOccurrences(result.Text, "message-20"));
+        }
+
+        [Fact]
+        public void OverlappingSummariesDoNotCauseMessageLoss()
+        {
+            var session = CreateLabeledSession(35);
+            session.Summaries.Add(CreateSummary(session, 1, 10, "A"));
+            session.Summaries.Add(CreateSummary(session, 8, 20, "B"));
+            session.Summaries.Add(CreateSummary(session, 19, 30, "C"));
+            var recent = session.Messages.Skip(30).ToList();
+
+            var result = new HistoricalContextBuilder().Build(session, recent);
+
+            Assert.DoesNotContain("title=\"A\"", result.Text);
+            Assert.DoesNotContain("title=\"B\"", result.Text);
+            Assert.DoesNotContain("title=\"C\"", result.Text);
+            for (int i = 1; i <= 30; i++)
+                Assert.Contains($"message-{i:00}", result.Text);
         }
 
         [Fact]
@@ -253,6 +377,15 @@ namespace AICharacterChat.Tests
                 .ToArray());
         }
 
+        private static ChatSession CreateLabeledSession(int count)
+        {
+            var session = CreateNumberedSession(count);
+            for (int i = 0; i < session.Messages.Count; i++)
+                session.Messages[i].Content = $"message-{i + 1:00}";
+
+            return session;
+        }
+
         private static ChatSession CreateSession(params ChatRole[] roles)
         {
             return new ChatSession
@@ -277,6 +410,19 @@ namespace AICharacterChat.Tests
                 UnresolvedMatters = "미해결",
                 PersistentState = "상태"
             };
+        }
+
+        private static int CountOccurrences(string value, string search)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = value.IndexOf(search, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += search.Length;
+            }
+
+            return count;
         }
     }
 }
