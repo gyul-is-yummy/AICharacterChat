@@ -46,6 +46,71 @@ namespace AICharacterChat.Application.Summaries
             if (summary == null)
                 return SummaryServiceResult.Failure("수정할 요약을 찾을 수 없습니다.");
 
+            return UpdateSummaryContent(
+                summary,
+                title,
+                currentSituation,
+                keyEvents,
+                relationshipChanges,
+                promisesAndImportantStatements,
+                unresolvedMatters,
+                persistentState);
+        }
+
+        public SummaryServiceResult UpdateSummaryContent(
+            ChatSession session,
+            ConversationSummary target,
+            string title,
+            string currentSituation,
+            string keyEvents,
+            string relationshipChanges,
+            string promisesAndImportantStatements,
+            string unresolvedMatters,
+            string persistentState)
+        {
+            if (!ContainsSummaryReference(session, target))
+                return SummaryServiceResult.Failure("수정할 요약을 찾을 수 없습니다.");
+
+            return UpdateSummaryContent(
+                target,
+                title,
+                currentSituation,
+                keyEvents,
+                relationshipChanges,
+                promisesAndImportantStatements,
+                unresolvedMatters,
+                persistentState);
+        }
+
+        public SummaryServiceResult DeleteSummary(ChatSession session, Guid summaryId)
+        {
+            var summary = session.Summaries.FirstOrDefault(s => s.Id == summaryId);
+            if (summary == null)
+                return SummaryServiceResult.Failure("삭제할 요약을 찾을 수 없습니다.");
+
+            return DeleteSummary(session, summary);
+        }
+
+        public SummaryServiceResult DeleteSummary(ChatSession session, ConversationSummary target)
+        {
+            int index = FindSummaryReferenceIndex(session, target);
+            if (index < 0)
+                return SummaryServiceResult.Failure("삭제할 요약을 찾을 수 없습니다.");
+
+            session.Summaries.RemoveAt(index);
+            return SummaryServiceResult.Success(target);
+        }
+
+        private static SummaryServiceResult UpdateSummaryContent(
+            ConversationSummary summary,
+            string title,
+            string currentSituation,
+            string keyEvents,
+            string relationshipChanges,
+            string promisesAndImportantStatements,
+            string unresolvedMatters,
+            string persistentState)
+        {
             var titleValidation = ValidateTitle(title);
             if (!titleValidation.IsSuccess)
                 return titleValidation;
@@ -63,21 +128,37 @@ namespace AICharacterChat.Application.Summaries
             return SummaryServiceResult.Success(summary);
         }
 
-        public SummaryServiceResult DeleteSummary(ChatSession session, Guid summaryId)
+        public SummaryServiceResult ValidateRange(
+            ChatSession session,
+            Guid startMessageId,
+            Guid endMessageId,
+            Guid? ignoreSummaryId = null)
         {
-            var summary = session.Summaries.FirstOrDefault(s => s.Id == summaryId);
-            if (summary == null)
-                return SummaryServiceResult.Failure("삭제할 요약을 찾을 수 없습니다.");
-
-            session.Summaries.Remove(summary);
-            return SummaryServiceResult.Success(summary);
+            return ValidateRange(
+                session,
+                startMessageId,
+                endMessageId,
+                summary => summary.Id == ignoreSummaryId);
         }
 
         public SummaryServiceResult ValidateRange(
             ChatSession session,
             Guid startMessageId,
             Guid endMessageId,
-            Guid? ignoreSummaryId = null)
+            ConversationSummary? ignoreSummary)
+        {
+            return ValidateRange(
+                session,
+                startMessageId,
+                endMessageId,
+                summary => ReferenceEquals(summary, ignoreSummary));
+        }
+
+        private static SummaryServiceResult ValidateRange(
+            ChatSession session,
+            Guid startMessageId,
+            Guid endMessageId,
+            Func<ConversationSummary, bool> shouldIgnoreSummary)
         {
             int startIndex = session.Messages.FindIndex(m => m.Id == startMessageId);
             if (startIndex < 0)
@@ -90,7 +171,7 @@ namespace AICharacterChat.Application.Summaries
             if (startIndex > endIndex)
                 return SummaryServiceResult.Failure("시작 메시지는 끝 메시지보다 앞에 있어야 합니다.");
 
-            foreach (var existing in session.Summaries.Where(s => s.Id != ignoreSummaryId))
+            foreach (var existing in session.Summaries.Where(s => !shouldIgnoreSummary(s)))
             {
                 int existingStart = session.Messages.FindIndex(m => m.Id == existing.StartMessageId);
                 int existingEnd = session.Messages.FindIndex(m => m.Id == existing.EndMessageId);
@@ -137,5 +218,19 @@ namespace AICharacterChat.Application.Summaries
 
         private static string NormalizeSection(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "없음" : value.Trim();
+
+        private static bool ContainsSummaryReference(ChatSession session, ConversationSummary target) =>
+            FindSummaryReferenceIndex(session, target) >= 0;
+
+        private static int FindSummaryReferenceIndex(ChatSession session, ConversationSummary target)
+        {
+            for (int i = 0; i < session.Summaries.Count; i++)
+            {
+                if (ReferenceEquals(session.Summaries[i], target))
+                    return i;
+            }
+
+            return -1;
+        }
     }
 }

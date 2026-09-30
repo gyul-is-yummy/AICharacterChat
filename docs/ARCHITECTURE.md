@@ -68,6 +68,24 @@ The summary request uses only the selected raw message range plus `Character.Nam
 
 Structured responses are represented in Application as provider-independent `JsonSchemaResponseFormat`. Anthropic-specific `output_config.format` mapping remains in Infrastructure.
 
+## Summary Persistence Flow
+
+Approved summary changes are handled by `ConversationSummaryPersistenceService`:
+
+```text
+SummaryDraft or selected ConversationSummary
+-> ConversationSummaryService
+-> IWorldRepository.SaveAsync(WorldStore)
+```
+
+`ConversationSummaryService` remains a domain validation and mutation service. It does not depend on repositories.
+
+`ConversationSummaryPersistenceService` owns memory rollback for Add, Update, and Delete. If repository save fails or is canceled, it restores `ChatSession.Summaries` to the pre-operation state and does not retry saving. Update rollback restores the same target object instead of replacing it, and Delete rollback reinserts the same object at its original index.
+
+`JsonWorldRepository` and `JsonFileWriter` remain responsible for disk-level atomicity. The summary persistence flow does not introduce a new repository abstraction, unit-of-work layer, lock, or storage format.
+
+Summary generation and regeneration remain draft-only. Regeneration targets an existing `ConversationSummary` object, uses its original message range, and does not mutate or save the target summary.
+
 ## Current Boundaries
 
 `MainWindow` is MVVM-backed through `MainViewModel`. The code-behind constructs dependencies, opens dialogs, handles Enter-to-send, and scrolls the chat view.

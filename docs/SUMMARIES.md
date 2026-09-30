@@ -128,7 +128,7 @@ ChatSession.Summaries is not mutated.
 Repository SaveAsync is not called.
 ```
 
-Range validation reuses `ConversationSummaryService.ValidateRange`. New summary generation rejects overlap with existing summaries. Regeneration can pass the existing summary id as `ignoreSummaryId` so that the summary's own range is allowed while overlap with other summaries is still rejected.
+Range validation reuses `ConversationSummaryService.ValidateRange`. New summary generation rejects overlap with existing summaries. Regeneration uses the selected `ConversationSummary` target object, keeps its original range, and internally ignores only that target summary so that overlap with other summaries is still rejected.
 
 The AI request source is only the selected raw `ChatSession.Messages` range. It does not include lore, historical context, existing summaries, world settings, character prompt fields, or current-chat user wrapping. `Character.Name` is used only as the assistant speaker label in the transcript.
 
@@ -155,6 +155,33 @@ Empty summary section values are normalized to:
 ```
 
 Empty titles, titles longer than 40 characters, JSON parse failures, API failures, and cancellations all return a generation result without changing domain data.
+
+## Summary Persistence
+
+`ConversationSummaryPersistenceService` applies approved summary changes to a `ChatSession` and saves the containing `WorldStore`.
+
+```text
+SummaryDraft
+-> ConversationSummaryService domain mutation
+-> IWorldRepository.SaveAsync
+-> success result
+```
+
+The service is responsible for memory atomicity:
+
+- Add creates a new `ConversationSummary` from a draft, saves once, and returns the created summary.
+- Update mutates the selected summary object, saves once, and returns the same target object.
+- Delete removes the selected summary object, saves once, and returns the removed object.
+
+If validation fails, repository save is not called. If save fails or is canceled, the in-memory `ChatSession.Summaries` state is rolled back to the state before the operation. Rollback does not call `SaveAsync` again.
+
+Edit keeps the summary range immutable. To change a range, the existing summary must be deleted and a new summary must be created.
+
+The persistence service validates that the `ChatSession` belongs to the supplied `WorldStore` by object reference. Update and delete also target the exact selected `ConversationSummary` object by reference, not by searching for the first matching summary id.
+
+Disk atomicity remains the responsibility of `JsonWorldRepository` and `JsonFileWriter`, which write through a temporary file and replace or move the final JSON file.
+
+Duplicate `ConversationSummary.Id` values from externally edited JSON are not automatically repaired yet. Validation/recovery remains deferred until before Summary Management UI.
 
 ## Old Unsummarized Count
 

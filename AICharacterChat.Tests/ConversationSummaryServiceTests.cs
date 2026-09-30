@@ -237,6 +237,49 @@ namespace AICharacterChat.Tests
             Assert.Equal(end, summary.EndMessageId);
         }
 
+        [Fact]
+        public void ObjectTargetEditUpdatesExactObjectWhenIdsAreDuplicated()
+        {
+            var session = CreateSession(5);
+            var first = CreateSummary(session, 1, 2);
+            var second = CreateSummary(session, 4, 5);
+            second.Id = first.Id;
+            session.Summaries.Add(first);
+            session.Summaries.Add(second);
+
+            var result = new ConversationSummaryService().UpdateSummaryContent(
+                session,
+                second,
+                "수정",
+                "상황2",
+                "사건2",
+                "관계2",
+                "약속2",
+                "미해결2",
+                "상태2");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal("요약 1-2", first.Title);
+            Assert.Equal("수정", second.Title);
+        }
+
+        [Fact]
+        public void ObjectTargetDeleteRemovesExactObjectWhenIdsAreDuplicated()
+        {
+            var session = CreateSession(5);
+            var first = CreateSummary(session, 1, 2);
+            var second = CreateSummary(session, 4, 5);
+            second.Id = first.Id;
+            session.Summaries.Add(first);
+            session.Summaries.Add(second);
+
+            var result = new ConversationSummaryService().DeleteSummary(session, second);
+
+            Assert.True(result.IsSuccess);
+            Assert.Single(session.Summaries);
+            Assert.Same(first, session.Summaries.Single());
+        }
+
         private static ChatSession CreateSession(int count)
         {
             return new ChatSession

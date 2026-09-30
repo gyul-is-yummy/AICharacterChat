@@ -29,8 +29,10 @@ namespace AICharacterChat.Tests
     internal class FakeWorldRepository : IWorldRepository
     {
         public int SaveCount { get; private set; }
+        public int SaveCallCount => SaveCount;
         public Exception? SaveException { get; init; }
         public bool CancelSave { get; init; }
+        public WorldStore? LastSavedStore { get; private set; }
 
         public Task<WorldStore> LoadAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new WorldStore());
@@ -38,6 +40,7 @@ namespace AICharacterChat.Tests
         public Task SaveAsync(WorldStore store, CancellationToken cancellationToken = default)
         {
             SaveCount++;
+            LastSavedStore = store;
             if (CancelSave)
                 throw new OperationCanceledException(cancellationToken);
             if (SaveException != null)

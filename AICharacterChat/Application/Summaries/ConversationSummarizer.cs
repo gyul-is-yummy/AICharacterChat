@@ -66,20 +66,58 @@ namespace AICharacterChat.Application.Summaries
             _summaryService = summaryService;
         }
 
-        public async Task<SummaryGenerationResult> GenerateDraftAsync(
+        public Task<SummaryGenerationResult> GenerateNewDraftAsync(
             ChatSession session,
             Character character,
             Guid startMessageId,
             Guid endMessageId,
             string modelId,
-            Guid? ignoreSummaryId = null,
             CancellationToken cancellationToken = default)
+        {
+            return GenerateDraftCoreAsync(
+                session,
+                character,
+                startMessageId,
+                endMessageId,
+                modelId,
+                ignoreSummary: null,
+                cancellationToken);
+        }
+
+        public Task<SummaryGenerationResult> RegenerateDraftAsync(
+            ChatSession session,
+            Character character,
+            ConversationSummary target,
+            string modelId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!ContainsSummaryReference(session, target))
+                return Task.FromResult(SummaryGenerationResult.Failure("재생성할 요약을 찾을 수 없습니다."));
+
+            return GenerateDraftCoreAsync(
+                session,
+                character,
+                target.StartMessageId,
+                target.EndMessageId,
+                modelId,
+                target,
+                cancellationToken);
+        }
+
+        private async Task<SummaryGenerationResult> GenerateDraftCoreAsync(
+            ChatSession session,
+            Character character,
+            Guid startMessageId,
+            Guid endMessageId,
+            string modelId,
+            ConversationSummary? ignoreSummary,
+            CancellationToken cancellationToken)
         {
             var validation = _summaryService.ValidateRange(
                 session,
                 startMessageId,
                 endMessageId,
-                ignoreSummaryId);
+                ignoreSummary);
             if (!validation.IsSuccess)
                 return SummaryGenerationResult.Failure(validation.ErrorMessage ?? "요약 범위가 올바르지 않습니다.");
 
@@ -225,6 +263,17 @@ namespace AICharacterChat.Application.Summaries
 
         private static string Escape(string? value) =>
             WebUtility.HtmlEncode(value ?? "");
+
+        private static bool ContainsSummaryReference(ChatSession session, ConversationSummary target)
+        {
+            foreach (var summary in session.Summaries)
+            {
+                if (ReferenceEquals(summary, target))
+                    return true;
+            }
+
+            return false;
+        }
 
         private sealed class SummaryResponseDto
         {

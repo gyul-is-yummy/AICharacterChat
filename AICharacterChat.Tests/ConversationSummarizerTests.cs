@@ -21,7 +21,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -47,7 +47,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            await summarizer.GenerateDraftAsync(
+            await summarizer.GenerateNewDraftAsync(
                 session,
                 character,
                 session.Messages[5].Id,
@@ -75,7 +75,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            await summarizer.GenerateDraftAsync(
+            await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -94,7 +94,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            await summarizer.GenerateDraftAsync(
+            await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -132,7 +132,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[2].Id,
@@ -156,23 +156,144 @@ namespace AICharacterChat.Tests
             var allowedClient = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(allowedClient);
 
-            var allowed = await summarizer.GenerateDraftAsync(
+            var allowed = await summarizer.RegenerateDraftAsync(
                 session,
                 CreateCharacter(),
-                session.Messages[1].Id,
-                session.Messages[3].Id,
-                "model",
-                own.Id);
-            var rejected = await summarizer.GenerateDraftAsync(
+                own,
+                "model");
+            var rejected = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[3].Id,
                 session.Messages[6].Id,
                 "model",
-                own.Id);
+                default);
 
             Assert.True(allowed.IsSuccess);
             Assert.False(rejected.IsSuccess);
+        }
+
+        [Fact]
+        public async Task RegenerateUsesTargetOriginalRange()
+        {
+            var session = CreateSession(10);
+            var target = CreateSummary(session, 3, 5, "기존");
+            session.Summaries.Add(target);
+            var summarizer = CreateSummarizer(new FakeChatModelClient { Reply = ValidSummaryJson() });
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(target.StartMessageId, result.Draft!.StartMessageId);
+            Assert.Equal(target.EndMessageId, result.Draft.EndMessageId);
+        }
+
+        [Fact]
+        public async Task RegenerateRequiresTargetMembership()
+        {
+            var session = CreateSession(5);
+            var target = CreateSummary(session, 2, 4, "외부");
+            var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
+            var summarizer = CreateSummarizer(client);
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.False(result.IsSuccess);
+            Assert.Null(client.LastRequest);
+        }
+
+        [Fact]
+        public async Task RegenerateStillRejectsOtherSummaryOverlap()
+        {
+            var session = CreateSession(10);
+            var target = CreateSummary(session, 2, 6, "대상");
+            var other = CreateSummary(session, 4, 8, "겹침");
+            session.Summaries.Add(target);
+            session.Summaries.Add(other);
+            var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
+            var summarizer = CreateSummarizer(client);
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.False(result.IsSuccess);
+            Assert.Null(client.LastRequest);
+        }
+
+        [Fact]
+        public async Task RegenerateDoesNotIgnoreDifferentObjectWithSameId()
+        {
+            var session = CreateSession(10);
+            var target = CreateSummary(session, 2, 6, "대상");
+            var duplicateIdOther = CreateSummary(session, 4, 8, "같은 ID 겹침");
+            duplicateIdOther.Id = target.Id;
+            session.Summaries.Add(target);
+            session.Summaries.Add(duplicateIdOther);
+            var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
+            var summarizer = CreateSummarizer(client);
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.False(result.IsSuccess);
+            Assert.Null(client.LastRequest);
+        }
+
+        [Fact]
+        public async Task RegenerateDoesNotMutateTarget()
+        {
+            var session = CreateSession(6);
+            var target = CreateSummary(session, 2, 4, "기존");
+            target.Revision = 5;
+            var updatedAt = DateTimeOffset.Now.AddDays(-2);
+            target.UpdatedAt = updatedAt;
+            session.Summaries.Add(target);
+            var summarizer = CreateSummarizer(new FakeChatModelClient { Reply = ValidSummaryJson("새 초안") });
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal("기존", target.Title);
+            Assert.Equal(5, target.Revision);
+            Assert.Equal(updatedAt, target.UpdatedAt);
+        }
+
+        [Fact]
+        public async Task RegenerateDoesNotPersist()
+        {
+            var session = CreateSession(6);
+            var target = CreateSummary(session, 2, 4, "기존");
+            session.Summaries.Add(target);
+            var summariesBefore = session.Summaries.ToList();
+            var summarizer = CreateSummarizer(new FakeChatModelClient { Reply = ValidSummaryJson("새 초안") });
+
+            var result = await summarizer.RegenerateDraftAsync(
+                session,
+                CreateCharacter(),
+                target,
+                "model");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(summariesBefore, session.Summaries);
+            Assert.Same(target, session.Summaries.Single());
         }
 
         [Fact]
@@ -195,7 +316,7 @@ namespace AICharacterChat.Tests
             };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -231,7 +352,7 @@ namespace AICharacterChat.Tests
             };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -268,7 +389,7 @@ namespace AICharacterChat.Tests
                 var client = new FakeChatModelClient { Reply = SummaryJsonMissing(sectionName) };
                 var summarizer = CreateSummarizer(client);
 
-                var result = await summarizer.GenerateDraftAsync(
+                var result = await summarizer.GenerateNewDraftAsync(
                     session,
                     CreateCharacter(),
                     session.Messages[0].Id,
@@ -290,7 +411,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = SummaryJsonMissing("title") };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -311,7 +432,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson(title: "   ") };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -333,7 +454,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson(title: new string('가', 41)) };
             var summarizer = CreateSummarizer(client);
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -355,7 +476,7 @@ namespace AICharacterChat.Tests
             var summarizer = CreateSummarizer(
                 new FakeChatModelClient { Exception = new InvalidOperationException("API 실패") });
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -375,7 +496,7 @@ namespace AICharacterChat.Tests
             var summariesBefore = session.Summaries.ToList();
             var summarizer = CreateSummarizer(new FakeChatModelClient { Cancel = true });
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -395,7 +516,7 @@ namespace AICharacterChat.Tests
             var summariesBefore = session.Summaries.ToList();
             var summarizer = CreateSummarizer(new FakeChatModelClient { Reply = "not json" });
 
-            var result = await summarizer.GenerateDraftAsync(
+            var result = await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
@@ -417,7 +538,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            await summarizer.GenerateDraftAsync(
+            await summarizer.GenerateNewDraftAsync(
                 session,
                 character,
                 session.Messages[0].Id,
@@ -438,7 +559,7 @@ namespace AICharacterChat.Tests
             var client = new FakeChatModelClient { Reply = ValidSummaryJson() };
             var summarizer = CreateSummarizer(client);
 
-            await summarizer.GenerateDraftAsync(
+            await summarizer.GenerateNewDraftAsync(
                 session,
                 CreateCharacter(),
                 session.Messages[0].Id,
