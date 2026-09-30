@@ -7,6 +7,8 @@
         Loaded="Window_Loaded">
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
         <Style x:Key="IconButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -107,7 +109,14 @@
                     CornerRadius="12"
                     Padding="12,8"
                     Margin="5,4,60,4"
-                    HorizontalAlignment="Left">
+                    HorizontalAlignment="Left"
+                    BorderBrush="Transparent"
+                    BorderThickness="1">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick"
+                                  Command="{Binding DataContext.SelectSummaryMessageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  CommandParameter="{Binding}"/>
+                </Border.InputBindings>
                 <TextBlock Text="{Binding Content}"
                            Foreground="White"
                            FontSize="14"
@@ -118,6 +127,18 @@
                     <Setter TargetName="Bubble" Property="Background" Value="#7b2ff7"/>
                     <Setter TargetName="Bubble" Property="Margin" Value="60,4,5,4"/>
                     <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsInSummarySelectionRange}" Value="True">
+                    <Setter TargetName="Bubble" Property="Background" Value="#22375f"/>
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="#80c7ff"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSummarySelectionStart}" Value="True">
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="#f6d365"/>
+                    <Setter TargetName="Bubble" Property="BorderThickness" Value="2"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSummarySelectionEnd}" Value="True">
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="#f6d365"/>
+                    <Setter TargetName="Bubble" Property="BorderThickness" Value="2"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -188,6 +209,7 @@
         <Grid Grid.Column="1" Margin="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="50"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="120"/>
@@ -217,23 +239,83 @@
                 </StackPanel>
             </Grid>
 
+            <Grid Grid.Row="1" Margin="5,0,5,4">
+                <Grid Visibility="{Binding CanShowBeginSummarySelection, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Button Content="요약 만들기"
+                            HorizontalAlignment="Left"
+                            Padding="10,4"
+                            Background="#24345f"
+                            Foreground="#e8ddff"
+                            BorderBrush="#5f6fa0"
+                            BorderThickness="1"
+                            FontSize="12"
+                            Cursor="Hand"
+                            Command="{Binding BeginSummarySelectionCommand}"/>
+                </Grid>
+
+                <Border Visibility="{Binding IsSummarySelectionMode, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Background="#101832"
+                        BorderBrush="#38466f"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="8,6">
+                    <DockPanel LastChildFill="True">
+                        <StackPanel DockPanel.Dock="Right"
+                                    Orientation="Horizontal"
+                                    Margin="8,0,0,0">
+                            <Button Content="선택 다시 하기"
+                                    Padding="8,3"
+                                    Margin="0,0,5,0"
+                                    Background="#24345f"
+                                    Foreground="#e8ddff"
+                                    BorderBrush="#5f6fa0"
+                                    BorderThickness="1"
+                                    FontSize="12"
+                                    Cursor="Hand"
+                                    Command="{Binding ResetSummarySelectionCommand}"/>
+                            <Button Content="취소"
+                                    Padding="8,3"
+                                    Background="#2a213d"
+                                    Foreground="#ffdddd"
+                                    BorderBrush="#6f4b6f"
+                                    BorderThickness="1"
+                                    FontSize="12"
+                                    Cursor="Hand"
+                                    Command="{Binding CancelSummarySelectionCommand}"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="{Binding SummarySelectionStatusText}"
+                                       Foreground="#d8e6ff"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding SummarySelectionError}"
+                                       Visibility="{Binding HasSummarySelectionError, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Foreground="#ff9999"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
             <ScrollViewer x:Name="ChatScrollViewer"
-                          Grid.Row="1"
+                          Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           Margin="0,5">
-                <ItemsControl ItemsSource="{Binding Messages}"
+                <ItemsControl ItemsSource="{Binding MessageItems}"
                               ItemTemplate="{StaticResource MessageTemplate}"
                               Margin="5"/>
             </ScrollViewer>
 
-            <TextBlock Grid.Row="2"
+            <TextBlock Grid.Row="3"
                        Text="{Binding ErrorMessage}"
                        Foreground="#ff9999"
                        FontSize="12"
                        TextWrapping="Wrap"
                        Margin="5,0,5,6"/>
 
-            <Grid Grid.Row="3">
+            <Grid Grid.Row="4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="80"/>

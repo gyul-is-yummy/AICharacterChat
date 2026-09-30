@@ -86,6 +86,14 @@ SummaryDraft or selected ConversationSummary
 
 Summary generation and regeneration remain draft-only. Regeneration targets an existing `ConversationSummary` object, uses its original message range, and does not mutate or save the target summary.
 
+## Summary Range Selection
+
+Message range selection lives in Presentation. `MainViewModel` owns the transient selection mode, selected message references, validation state, and commands. `ChatMessageItemViewModel` is a rendering projection over each domain `ChatMessage`; it carries only visual selection flags.
+
+The domain source of truth remains `SelectedChatSession.Messages`. Selection state is not persisted. The selected range is exposed as `StartMessageId` and `EndMessageId` for the later summary draft step.
+
+Range validation reuses `ConversationSummaryService.ValidateRange`. The selection UI does not call `ConversationSummarizer`, does not save summaries, and does not use the summary persistence workflow.
+
 ## Current Boundaries
 
 `MainWindow` is MVVM-backed through `MainViewModel`. The code-behind constructs dependencies, opens dialogs, handles Enter-to-send, and scrolls the chat view.

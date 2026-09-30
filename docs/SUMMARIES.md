@@ -183,6 +183,20 @@ Disk atomicity remains the responsibility of `JsonWorldRepository` and `JsonFile
 
 Duplicate `ConversationSummary.Id` values from externally edited JSON are not automatically repaired yet. Validation/recovery remains deferred until before Summary Management UI.
 
+## Message Range Selection
+
+Message range selection is Presentation-only UI state. It is not stored in `WorldStore`, `ChatSession`, `ChatMessage`, or JSON.
+
+The chat screen projects domain messages into `ChatMessageItemViewModel` instances for rendering selection state. The source of truth remains `SelectedChatSession.Messages`.
+
+Selection mode uses message clicks to choose one contiguous inclusive range. The first click sets the anchor, the second click sets the other endpoint, and reverse order clicks are normalized into chronological `StartMessageId` and `EndMessageId` values. Clicking another message after a completed range starts a new selection.
+
+Range validation reuses `ConversationSummaryService.ValidateRange`, so existing summary overlap rules are not duplicated in Presentation. Invalid ranges remain highlighted, but `SummarySelectionError` is shown and the selection is not considered valid.
+
+Sending a new chat message is disabled while selection mode is active. Session changes and Clear Chat clear the transient selection state.
+
+3-B.3 does not call AI summary generation, open a preview, or save summaries.
+
 ## Old Unsummarized Count
 
 `HistoricalContextBuilder` counts only historical raw messages that were not replaced by a summary.
@@ -201,7 +215,6 @@ The following are intentionally not implemented yet:
 
 - Summary preview window
 - Summary management window
-- Message range selection UI
 - Warning banner UI
 - Regeneration UI
 - Direct edit UI

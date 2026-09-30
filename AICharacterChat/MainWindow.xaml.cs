@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using AICharacterChat.Application.Chat;
 using AICharacterChat.Application.Context;
+using AICharacterChat.Application.Summaries;
 using AICharacterChat.Domain.Models;
 using AICharacterChat.Infrastructure.AI.Anthropic;
 using AICharacterChat.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ namespace AICharacterChat
     public partial class MainWindow : Window
     {
         private readonly MainViewModel _viewModel;
+        private bool _isScrollToBottomQueued;
 
         public MainWindow()
         {
@@ -35,14 +37,33 @@ namespace AICharacterChat
                 loreMatcher,
                 recentMessageSelector,
                 historicalContextBuilder);
+            var summaryService = new ConversationSummaryService();
             var chatService = new ChatService(
                 chatClient,
                 worldRepository,
                 contextBuilder);
 
-            _viewModel = new MainViewModel(worldRepository, settingsRepository, modelCatalog, chatService);
-            _viewModel.Messages.CollectionChanged += (_, _) => ChatScrollViewer.ScrollToBottom();
+            _viewModel = new MainViewModel(
+                worldRepository,
+                settingsRepository,
+                modelCatalog,
+                chatService,
+                summaryService);
+            _viewModel.MessageItems.CollectionChanged += (_, _) => QueueScrollToBottom();
             DataContext = _viewModel;
+        }
+
+        private void QueueScrollToBottom()
+        {
+            if (_isScrollToBottomQueued)
+                return;
+
+            _isScrollToBottomQueued = true;
+            Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                _isScrollToBottomQueued = false;
+                ChatScrollViewer.ScrollToBottom();
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)

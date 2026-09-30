@@ -99,26 +99,412 @@ namespace AICharacterChat.Tests
             Assert.Equal("user-2", world.GetSessionForCharacter("char-new")!.UserPersonaId);
         }
 
+        [Fact]
+        public async Task RefreshMessagesBuildsMessageItemsProjection()
+        {
+            var world = TestData.CreateWorld();
+            var first = new ChatMessage(ChatRole.User, "첫 메시지");
+            var second = new ChatMessage(ChatRole.Assistant, "둘째 메시지");
+            world.ChatSessions[0].Messages.Add(first);
+            world.ChatSessions[0].Messages.Add(second);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+
+            await vm.InitializeAsync();
+
+            Assert.Equal(2, vm.Messages.Count);
+            Assert.Equal(2, vm.MessageItems.Count);
+            Assert.Same(first, vm.MessageItems[0].Message);
+            Assert.Same(second, vm.MessageItems[1].Message);
+            Assert.Equal("첫 메시지", vm.MessageItems[0].Content);
+            Assert.Equal(ChatRole.Assistant, vm.MessageItems[1].Role);
+        }
+
+        [Fact]
+        public async Task BeginSummarySelectionEntersMode()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(2);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+
+            Assert.True(vm.IsSummarySelectionMode);
+            Assert.Equal("시작 메시지를 선택하세요", vm.SummarySelectionStatusText);
+        }
+
+        [Fact]
+        public async Task BeginWithoutMessagesDoesNotEnterMode()
+        {
+            var world = TestData.CreateWorld();
+            world.ChatSessions[0].Messages.Clear();
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+
+            Assert.False(vm.IsSummarySelectionMode);
+        }
+
+        [Fact]
+        public async Task BeginWhileSendingDoesNotEnterMode()
+        {
+            var world = TestData.CreateWorld();
+            world.ChatSessions[0].Messages.Add(new ChatMessage(ChatRole.User, "기존"));
+            var store = new WorldStore { ActiveWorldId = world.Id, Worlds = [world] };
+            var client = new BlockingChatModelClient();
+            var vm = CreateViewModel(store, client);
+            await vm.InitializeAsync();
+            vm.InputText = "전송 중";
+
+            var sendTask = vm.SendMessageCommand.ExecuteAsync(null);
+            await client.CallStarted.Task;
+
+            Assert.True(vm.IsSending);
+            Assert.False(vm.BeginSummarySelectionCommand.CanExecute(null));
+            vm.BeginSummarySelectionCommand.Execute(null);
+            Assert.False(vm.IsSummarySelectionMode);
+
+            client.Complete("답");
+            await sendTask;
+
+            Assert.False(vm.IsSending);
+            Assert.True(vm.BeginSummarySelectionCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task BeginCommandRaisesCanExecuteChangedWhenSendingChanges()
+        {
+            var world = TestData.CreateWorld();
+            world.ChatSessions[0].Messages.Add(new ChatMessage(ChatRole.User, "기존"));
+            var store = new WorldStore { ActiveWorldId = world.Id, Worlds = [world] };
+            var client = new BlockingChatModelClient();
+            var vm = CreateViewModel(store, client);
+            await vm.InitializeAsync();
+            vm.InputText = "전송 중";
+            var canExecuteChangedCount = 0;
+            vm.BeginSummarySelectionCommand.CanExecuteChanged += (_, _) => canExecuteChangedCount++;
+
+            var sendTask = vm.SendMessageCommand.ExecuteAsync(null);
+            await client.CallStarted.Task;
+
+            Assert.False(vm.BeginSummarySelectionCommand.CanExecute(null));
+            Assert.True(canExecuteChangedCount >= 1);
+
+            client.Complete("답");
+            await sendTask;
+
+            Assert.True(vm.BeginSummarySelectionCommand.CanExecute(null));
+            Assert.True(canExecuteChangedCount >= 2);
+        }
+
+        [Fact]
+        public async Task FirstClickSetsAnchor()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+
+            Assert.Equal(vm.MessageItems[1].Id, vm.SummarySelectionStartMessageId);
+            Assert.Null(vm.SummarySelectionEndMessageId);
+            Assert.True(vm.MessageItems[1].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[1].IsSummarySelectionStart);
+            Assert.Equal("끝 메시지를 선택하세요", vm.SummarySelectionStatusText);
+        }
+
+        [Fact]
+        public async Task SecondClickCreatesRange()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(5);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[3]);
+
+            Assert.Equal(vm.MessageItems[1].Id, vm.SummarySelectionStartMessageId);
+            Assert.Equal(vm.MessageItems[3].Id, vm.SummarySelectionEndMessageId);
+            Assert.Equal(3, vm.SummarySelectionMessageCount);
+            Assert.True(vm.IsSummarySelectionValid);
+            Assert.True(vm.MessageItems[2].IsInSummarySelectionRange);
+        }
+
+        [Fact]
+        public async Task ReverseClickNormalizesRange()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(5);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[4]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+
+            Assert.Equal(vm.MessageItems[1].Id, vm.SummarySelectionStartMessageId);
+            Assert.Equal(vm.MessageItems[4].Id, vm.SummarySelectionEndMessageId);
+            Assert.Equal(4, vm.SummarySelectionMessageCount);
+        }
+
+        [Fact]
+        public async Task SelectingSameMessageTwiceCreatesSingleMessageRange()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+
+            Assert.Equal(vm.MessageItems[1].Id, vm.SummarySelectionStartMessageId);
+            Assert.Equal(vm.MessageItems[1].Id, vm.SummarySelectionEndMessageId);
+            Assert.Equal(1, vm.SummarySelectionMessageCount);
+            Assert.True(vm.IsSummarySelectionValid);
+        }
+
+        [Fact]
+        public async Task ThirdClickRestartsSelectionWithNewAnchor()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(5);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[4]);
+
+            Assert.Equal(vm.MessageItems[4].Id, vm.SummarySelectionStartMessageId);
+            Assert.Null(vm.SummarySelectionEndMessageId);
+            Assert.False(vm.MessageItems[0].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[4].IsSummarySelectionStart);
+        }
+
+        [Fact]
+        public async Task ResetKeepsSelectionModeAndClearsRange()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+
+            vm.ResetSummarySelectionCommand.Execute(null);
+
+            Assert.True(vm.IsSummarySelectionMode);
+            Assert.Null(vm.SummarySelectionStartMessageId);
+            Assert.Null(vm.SummarySelectionEndMessageId);
+            Assert.All(vm.MessageItems, item => Assert.False(item.IsInSummarySelectionRange));
+        }
+
+        [Fact]
+        public async Task CancelExitsSelectionModeAndClearsState()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+
+            vm.CancelSummarySelectionCommand.Execute(null);
+
+            Assert.False(vm.IsSummarySelectionMode);
+            Assert.Null(vm.SummarySelectionStartMessageId);
+            Assert.Empty(vm.SummarySelectionError);
+            Assert.All(vm.MessageItems, item => Assert.False(item.IsInSummarySelectionRange));
+        }
+
+        [Fact]
+        public async Task VisualStateMarksRangeStartAndEnd()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(5);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[1]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[3]);
+
+            Assert.False(vm.MessageItems[0].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[1].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[2].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[3].IsInSummarySelectionRange);
+            Assert.False(vm.MessageItems[4].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[1].IsSummarySelectionStart);
+            Assert.True(vm.MessageItems[3].IsSummarySelectionEnd);
+        }
+
+        [Fact]
+        public async Task ValidRangeHasNoSelectionError()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+
+            Assert.Empty(vm.SummarySelectionError);
+            Assert.True(vm.IsSummarySelectionValid);
+        }
+
+        [Fact]
+        public async Task OverlappingSummarySetsSelectionError()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 5);
+            world.ChatSessions[0].Summaries.Add(new ConversationSummary
+            {
+                StartMessageId = world.ChatSessions[0].Messages[1].Id,
+                EndMessageId = world.ChatSessions[0].Messages[3].Id,
+                Title = "기존 요약"
+            });
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+
+            Assert.Contains("겹칩니다", vm.SummarySelectionError);
+            Assert.False(vm.IsSummarySelectionValid);
+            Assert.True(vm.MessageItems[0].IsInSummarySelectionRange);
+            Assert.True(vm.MessageItems[2].IsInSummarySelectionRange);
+        }
+
+        [Fact]
+        public async Task AdjacentSummaryRangeIsValid()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 5);
+            world.ChatSessions[0].Summaries.Add(new ConversationSummary
+            {
+                StartMessageId = world.ChatSessions[0].Messages[0].Id,
+                EndMessageId = world.ChatSessions[0].Messages[1].Id,
+                Title = "기존 요약"
+            });
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[4]);
+
+            Assert.Empty(vm.SummarySelectionError);
+            Assert.True(vm.IsSummarySelectionValid);
+        }
+
+        [Fact]
+        public async Task SendIsDisabledDuringSummarySelection()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(1);
+            vm.InputText = "보낼 메시지";
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+
+            Assert.False(vm.SendMessageCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task CancelReenablesSend()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(1);
+            vm.InputText = "보낼 메시지";
+            vm.BeginSummarySelectionCommand.Execute(null);
+
+            vm.CancelSummarySelectionCommand.Execute(null);
+
+            Assert.True(vm.SendMessageCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task SessionChangeClearsSummarySelection()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 3);
+            var other = new Character { Id = "char-2", Name = "다른 캐릭터" };
+            world.Characters.Add(other);
+            world.ChatSessions.Add(new ChatSession
+            {
+                WorldId = world.Id,
+                CharacterId = other.Id,
+                UserPersonaId = world.UserPersonas[0].Id,
+                Messages = [new ChatMessage(ChatRole.User, "다른 대화")]
+            });
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+
+            await vm.AddCharacterAsync(new Character { Id = "char-3", Name = "새 캐릭터" }, world.UserPersonas[0].Id);
+
+            Assert.False(vm.IsSummarySelectionMode);
+            Assert.Null(vm.SummarySelectionStartMessageId);
+        }
+
+        [Fact]
+        public async Task ClearChatClearsSummarySelection()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 3);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+
+            await vm.ClearChatForCharacterAsync(world.Characters[0]);
+
+            Assert.False(vm.IsSummarySelectionMode);
+            Assert.Empty(vm.MessageItems);
+            Assert.Null(vm.SummarySelectionStartMessageId);
+        }
+
+        [Fact]
+        public async Task SummarySelectionDoesNotMutateDomain()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 3);
+            var session = world.ChatSessions[0];
+            var messageSnapshot = session.Messages.ToList();
+            var summarySnapshot = session.Summaries.ToList();
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+
+            Assert.Equal(messageSnapshot, session.Messages);
+            Assert.Equal(summarySnapshot, session.Summaries);
+        }
+
+        private static async Task<MainViewModel> CreateInitializedViewModelWithMessagesAsync(int messageCount)
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], messageCount);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            return vm;
+        }
+
         private static MainViewModel CreateViewModel(WorldStore store)
         {
             var repository = new MemoryWorldRepository(store);
             return CreateViewModel(repository);
         }
 
-        private static MainViewModel CreateViewModel(MemoryWorldRepository repository)
+        private static MainViewModel CreateViewModel(WorldStore store, IChatModelClient chatClient)
+        {
+            var repository = new MemoryWorldRepository(store);
+            return CreateViewModel(repository, chatClient);
+        }
+
+        private static MainViewModel CreateViewModel(MemoryWorldRepository repository, IChatModelClient? chatClient = null)
         {
             return new MainViewModel(
                 repository,
                 new MemorySettingsRepository(),
                 new MemoryModelCatalog(),
                 new ChatService(
-                    new FakeChatModelClient { Reply = "답" },
+                    chatClient ?? new FakeChatModelClient { Reply = "답" },
                     repository,
                     new ContextBuilder(
                         new PromptBuilder(),
                         new LoreMatcher(),
                         new RecentMessageSelector(),
                         new HistoricalContextBuilder())));
+        }
+
+        private static void AddMessages(ChatSession session, int count)
+        {
+            session.Messages.Clear();
+            for (int i = 1; i <= count; i++)
+                session.Messages.Add(new ChatMessage(i % 2 == 0 ? ChatRole.Assistant : ChatRole.User, $"message-{i}"));
         }
 
         private class MemoryWorldRepository : IWorldRepository
@@ -153,6 +539,23 @@ namespace AICharacterChat.Tests
             [
                 new ChatModelOption { Id = "model", Label = "Model" }
             ];
+        }
+
+        private class BlockingChatModelClient : IChatModelClient
+        {
+            private readonly TaskCompletionSource<string> _reply = new();
+            public TaskCompletionSource<bool> CallStarted { get; } = new();
+
+            public async Task<string> SendAsync(ChatCompletionRequest request, System.Threading.CancellationToken cancellationToken = default)
+            {
+                CallStarted.TrySetResult(true);
+                return await _reply.Task;
+            }
+
+            public void Complete(string reply)
+            {
+                _reply.TrySetResult(reply);
+            }
         }
     }
 }

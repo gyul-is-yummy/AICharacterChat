@@ -6,6 +6,7 @@ using System.Windows.Input;
 using AICharacterChat.Application.Chat;
 using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Models;
+using AICharacterChat.Application.Summaries;
 using AICharacterChat.Domain.Enums;
 using AICharacterChat.Domain.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -28,10 +29,16 @@ namespace AICharacterChat.Presentation.ViewModels
         private string _inputText = "";
         private bool _isSending;
         private string _errorMessage = "";
+        private bool _isSummarySelectionMode;
+        private ChatMessage? _summarySelectionAnchorMessage;
+        private ChatMessage? _summarySelectionStartMessage;
+        private ChatMessage? _summarySelectionEndMessage;
+        private string _summarySelectionError = "";
 
         public ObservableCollection<World> Worlds { get; } = new();
         public ObservableCollection<Character> Characters { get; } = new();
         public ObservableCollection<ChatMessage> Messages { get; } = new();
+        public ObservableCollection<ChatMessageItemViewModel> MessageItems { get; } = new();
         public ObservableCollection<ChatModelOption> Models { get; } = new();
 
         public ICommand SelectWorldCommand { get; }
@@ -41,17 +48,23 @@ namespace AICharacterChat.Presentation.ViewModels
         public ICommand DeleteWorldCommand { get; }
         public ICommand DeleteCharacterCommand { get; }
         public ICommand ClearChatCommand { get; }
+        public IRelayCommand BeginSummarySelectionCommand { get; }
+        public IRelayCommand<ChatMessageItemViewModel> SelectSummaryMessageCommand { get; }
+        public IRelayCommand ResetSummarySelectionCommand { get; }
+        public IRelayCommand CancelSummarySelectionCommand { get; }
 
         public MainViewModel(
             IWorldRepository worldRepository,
             ISettingsRepository settingsRepository,
             IChatModelCatalog chatModelCatalog,
-            ChatService chatService)
+            ChatService chatService,
+            ConversationSummaryService? summaryService = null)
         {
             _worldRepository = worldRepository;
             _settingsRepository = settingsRepository;
             _chatModelCatalog = chatModelCatalog;
             _chatService = chatService;
+            _summaryService = summaryService ?? new ConversationSummaryService();
 
             SelectWorldCommand = new AsyncRelayCommand<World>(SelectWorldAsync);
             SelectCharacterCommand = new AsyncRelayCommand<Character>(SelectCharacterAsync);
@@ -60,7 +73,13 @@ namespace AICharacterChat.Presentation.ViewModels
             DeleteWorldCommand = new AsyncRelayCommand<World>(DeleteWorldAsync);
             DeleteCharacterCommand = new AsyncRelayCommand<Character>(DeleteCharacterAsync);
             ClearChatCommand = new AsyncRelayCommand<Character>(ClearChatForCharacterAsync);
+            BeginSummarySelectionCommand = new RelayCommand(BeginSummarySelection, CanBeginSummarySelection);
+            SelectSummaryMessageCommand = new RelayCommand<ChatMessageItemViewModel>(SelectSummaryMessage);
+            ResetSummarySelectionCommand = new RelayCommand(ResetSummarySelection);
+            CancelSummarySelectionCommand = new RelayCommand(CancelSummarySelection);
         }
+
+        private readonly ConversationSummaryService _summaryService;
 
         public WorldStore Store => _store;
 
@@ -116,7 +135,10 @@ namespace AICharacterChat.Presentation.ViewModels
             private set
             {
                 if (SetProperty(ref _isSending, value))
+                {
                     SendMessageCommand.NotifyCanExecuteChanged();
+                    BeginSummarySelectionCommand.NotifyCanExecuteChanged();
+                }
             }
         }
 
@@ -128,6 +150,85 @@ namespace AICharacterChat.Presentation.ViewModels
 
         public bool HasSelectedWorld => SelectedWorld != null;
         public string SelectedCharacterName => SelectedCharacter?.Name ?? "";
+        public bool HasMessages => SelectedChatSession?.Messages.Count > 0;
+
+        public bool IsSummarySelectionMode
+        {
+            get => _isSummarySelectionMode;
+            private set
+            {
+                if (SetProperty(ref _isSummarySelectionMode, value))
+                {
+                    OnPropertyChanged(nameof(SummarySelectionStatusText));
+                    OnPropertyChanged(nameof(CanShowBeginSummarySelection));
+                    SendMessageCommand.NotifyCanExecuteChanged();
+                    BeginSummarySelectionCommand.NotifyCanExecuteChanged();
+                }
+            }
+        }
+
+        public bool CanShowBeginSummarySelection => !IsSummarySelectionMode;
+        public Guid? SummarySelectionStartMessageId => _summarySelectionStartMessage?.Id;
+        public Guid? SummarySelectionEndMessageId => _summarySelectionEndMessage?.Id;
+
+        public int SummarySelectionMessageCount
+        {
+            get
+            {
+                if (SelectedChatSession == null ||
+                    _summarySelectionStartMessage == null ||
+                    _summarySelectionEndMessage == null)
+                    return 0;
+
+                int startIndex = FindMessageReferenceIndex(_summarySelectionStartMessage);
+                int endIndex = FindMessageReferenceIndex(_summarySelectionEndMessage);
+                if (startIndex < 0 || endIndex < 0)
+                    return 0;
+
+                return Math.Abs(endIndex - startIndex) + 1;
+            }
+        }
+
+        public bool HasSummarySelectionRange =>
+            IsSummarySelectionMode &&
+            _summarySelectionStartMessage != null &&
+            _summarySelectionEndMessage != null;
+
+        public bool IsSummarySelectionValid =>
+            HasSummarySelectionRange &&
+            string.IsNullOrWhiteSpace(SummarySelectionError);
+
+        public bool HasSummarySelectionError => !string.IsNullOrWhiteSpace(SummarySelectionError);
+
+        public string SummarySelectionError
+        {
+            get => _summarySelectionError;
+            private set
+            {
+                if (SetProperty(ref _summarySelectionError, value))
+                {
+                    OnPropertyChanged(nameof(HasSummarySelectionError));
+                    OnPropertyChanged(nameof(IsSummarySelectionValid));
+                }
+            }
+        }
+
+        public string SummarySelectionStatusText
+        {
+            get
+            {
+                if (!IsSummarySelectionMode)
+                    return "";
+
+                if (_summarySelectionAnchorMessage == null)
+                    return "시작 메시지를 선택하세요";
+
+                if (_summarySelectionEndMessage == null)
+                    return "끝 메시지를 선택하세요";
+
+                return $"{SummarySelectionMessageCount}개 메시지 선택됨";
+            }
+        }
 
         public async Task InitializeAsync()
         {
@@ -255,7 +356,8 @@ namespace AICharacterChat.Presentation.ViewModels
 
         private bool CanSendMessage()
         {
-            return !IsSending &&
+            return !IsSummarySelectionMode &&
+                   !IsSending &&
                    SelectedChatSession != null &&
                    !string.IsNullOrWhiteSpace(InputText);
         }
@@ -281,12 +383,15 @@ namespace AICharacterChat.Presentation.ViewModels
         {
             if (SelectedWorld == null || character == null)
             {
+                CancelSummarySelection();
                 SelectedCharacter = null;
                 SelectedChatSession = null;
                 Messages.Clear();
+                MessageItems.Clear();
                 return;
             }
 
+            CancelSummarySelection();
             SelectedCharacter = character;
             SelectedWorld.ActiveCharacterId = character.Id;
             SelectedChatSession = EnsureSession(SelectedWorld, character);
@@ -327,6 +432,9 @@ namespace AICharacterChat.Presentation.ViewModels
 
             var originalMessages = session.Messages.ToList();
             var originalSummaries = session.Summaries.ToList();
+            if (ReferenceEquals(session, SelectedChatSession))
+                CancelSummarySelection();
+
             try
             {
                 session.Messages.Clear();
@@ -387,11 +495,175 @@ namespace AICharacterChat.Presentation.ViewModels
         public void RefreshMessages()
         {
             Messages.Clear();
+            MessageItems.Clear();
             if (SelectedChatSession == null)
+            {
+                NotifyMessageStateChanged();
                 return;
+            }
 
             foreach (var message in SelectedChatSession.Messages)
+            {
                 Messages.Add(message);
+                MessageItems.Add(new ChatMessageItemViewModel(message));
+            }
+
+            UpdateSummarySelectionVisuals();
+            NotifyMessageStateChanged();
+        }
+
+        private void BeginSummarySelection()
+        {
+            if (!CanBeginSummarySelection())
+                return;
+
+            ClearSummarySelection(exitMode: false);
+            IsSummarySelectionMode = true;
+            NotifySelectionStateChanged();
+            UpdateSummarySelectionVisuals();
+        }
+
+        private bool CanBeginSummarySelection()
+        {
+            return !IsSending &&
+                   SelectedChatSession != null &&
+                   SelectedChatSession.Messages.Count > 0 &&
+                   !IsSummarySelectionMode;
+        }
+
+        private void SelectSummaryMessage(ChatMessageItemViewModel? item)
+        {
+            if (!IsSummarySelectionMode || item == null || SelectedChatSession == null)
+                return;
+
+            var clickedMessage = item.Message;
+            int clickedIndex = FindMessageReferenceIndex(clickedMessage);
+            if (clickedIndex < 0)
+            {
+                SummarySelectionError = "선택한 메시지를 현재 대화에서 찾을 수 없습니다.";
+                NotifySelectionStateChanged();
+                UpdateSummarySelectionVisuals();
+                return;
+            }
+
+            if (_summarySelectionAnchorMessage == null || _summarySelectionEndMessage != null)
+            {
+                _summarySelectionAnchorMessage = clickedMessage;
+                _summarySelectionStartMessage = clickedMessage;
+                _summarySelectionEndMessage = null;
+                SummarySelectionError = "";
+                NotifySelectionStateChanged();
+                UpdateSummarySelectionVisuals();
+                return;
+            }
+
+            int anchorIndex = FindMessageReferenceIndex(_summarySelectionAnchorMessage);
+            if (anchorIndex < 0)
+            {
+                SummarySelectionError = "선택한 메시지를 현재 대화에서 찾을 수 없습니다.";
+                NotifySelectionStateChanged();
+                UpdateSummarySelectionVisuals();
+                return;
+            }
+
+            int startIndex = Math.Min(anchorIndex, clickedIndex);
+            int endIndex = Math.Max(anchorIndex, clickedIndex);
+            _summarySelectionStartMessage = SelectedChatSession.Messages[startIndex];
+            _summarySelectionEndMessage = SelectedChatSession.Messages[endIndex];
+
+            var validation = _summaryService.ValidateRange(
+                SelectedChatSession,
+                _summarySelectionStartMessage.Id,
+                _summarySelectionEndMessage.Id);
+            SummarySelectionError = validation.IsSuccess
+                ? ""
+                : validation.ErrorMessage ?? "요약 범위가 올바르지 않습니다.";
+
+            NotifySelectionStateChanged();
+            UpdateSummarySelectionVisuals();
+        }
+
+        private void ResetSummarySelection()
+        {
+            if (!IsSummarySelectionMode)
+                return;
+
+            ClearSummarySelection(exitMode: false);
+            NotifySelectionStateChanged();
+            UpdateSummarySelectionVisuals();
+        }
+
+        private void CancelSummarySelection()
+        {
+            ClearSummarySelection(exitMode: true);
+            NotifySelectionStateChanged();
+            UpdateSummarySelectionVisuals();
+        }
+
+        private void ClearSummarySelection(bool exitMode)
+        {
+            _summarySelectionAnchorMessage = null;
+            _summarySelectionStartMessage = null;
+            _summarySelectionEndMessage = null;
+            SummarySelectionError = "";
+
+            if (exitMode)
+                IsSummarySelectionMode = false;
+        }
+
+        private void UpdateSummarySelectionVisuals()
+        {
+            int startIndex = _summarySelectionStartMessage == null
+                ? -1
+                : FindMessageReferenceIndex(_summarySelectionStartMessage);
+            int endIndex = _summarySelectionEndMessage == null
+                ? startIndex
+                : FindMessageReferenceIndex(_summarySelectionEndMessage);
+
+            if (startIndex > endIndex)
+                (startIndex, endIndex) = (endIndex, startIndex);
+
+            for (int i = 0; i < MessageItems.Count; i++)
+            {
+                bool inRange = IsSummarySelectionMode &&
+                               startIndex >= 0 &&
+                               endIndex >= 0 &&
+                               i >= startIndex &&
+                               i <= endIndex;
+                MessageItems[i].IsInSummarySelectionRange = inRange;
+                MessageItems[i].IsSummarySelectionStart = IsSummarySelectionMode && i == startIndex;
+                MessageItems[i].IsSummarySelectionEnd = IsSummarySelectionMode && _summarySelectionEndMessage != null && i == endIndex;
+            }
+        }
+
+        private int FindMessageReferenceIndex(ChatMessage message)
+        {
+            if (SelectedChatSession == null)
+                return -1;
+
+            for (int i = 0; i < SelectedChatSession.Messages.Count; i++)
+            {
+                if (ReferenceEquals(SelectedChatSession.Messages[i], message))
+                    return i;
+            }
+
+            return -1;
+        }
+
+        private void NotifySelectionStateChanged()
+        {
+            OnPropertyChanged(nameof(SummarySelectionStartMessageId));
+            OnPropertyChanged(nameof(SummarySelectionEndMessageId));
+            OnPropertyChanged(nameof(SummarySelectionMessageCount));
+            OnPropertyChanged(nameof(HasSummarySelectionRange));
+            OnPropertyChanged(nameof(IsSummarySelectionValid));
+            OnPropertyChanged(nameof(SummarySelectionStatusText));
+        }
+
+        private void NotifyMessageStateChanged()
+        {
+            OnPropertyChanged(nameof(HasMessages));
+            BeginSummarySelectionCommand.NotifyCanExecuteChanged();
         }
     }
 }
