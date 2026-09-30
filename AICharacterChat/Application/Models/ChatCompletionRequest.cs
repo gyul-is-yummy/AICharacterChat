@@ -8,5 +8,6 @@ namespace AICharacterChat.Application.Models
         public int MaxTokens { get; set; } = 1024;
         public string SystemPrompt { get; set; } = "";
         public IReadOnlyList<ChatCompletionMessage> Messages { get; set; } = [];
+        public JsonSchemaResponseFormat? ResponseFormat { get; set; }
     }
 }

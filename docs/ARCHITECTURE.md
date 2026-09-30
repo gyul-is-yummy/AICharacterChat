@@ -50,6 +50,24 @@ If the provider succeeds but repository save fails or is canceled, `ChatService`
 
 `ChatSession.Summaries` stores user-managed `ConversationSummary` ranges. `HistoricalContextBuilder` uses summaries only when their full range is outside the actual recent selection; otherwise the historical portion remains raw. Historical Context is rendered on demand and is not saved.
 
+## Summary Draft Generation
+
+`ConversationSummarizer` creates an editable `SummaryDraft` from a selected continuous `ChatMessage` range.
+
+```text
+selected raw ChatSession.Messages range
+-> ConversationSummarizer
+-> IChatModelClient
+-> structured JSON response
+-> SummaryDraft
+```
+
+Summary draft generation is read-only. It does not mutate `ChatSession.Messages`, does not add to `ChatSession.Summaries`, and does not save repositories.
+
+The summary request uses only the selected raw message range plus `Character.Name` as the assistant speaker label. It does not use `ContextBuilder`, `PromptBuilder`, `LoreMatcher`, `HistoricalContextBuilder`, existing summaries, world settings, or character prompt fields.
+
+Structured responses are represented in Application as provider-independent `JsonSchemaResponseFormat`. Anthropic-specific `output_config.format` mapping remains in Infrastructure.
+
 ## Current Boundaries
 
 `MainWindow` is MVVM-backed through `MainViewModel`. The code-behind constructs dependencies, opens dialogs, handles Enter-to-send, and scrolls the chat view.

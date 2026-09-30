@@ -100,6 +100,62 @@ Clear Chat clears both `ChatSession.Messages` and `ChatSession.Summaries` for th
 
 If saving fails, the in-memory messages and summaries are restored and the failure is propagated instead of leaving a partially cleared session.
 
+## Summary Draft Generation
+
+`ConversationSummarizer` can generate a `SummaryDraft` from a selected continuous `ChatMessage` range.
+
+`SummaryDraft` contains:
+
+```text
+StartMessageId
+EndMessageId
+Title
+CurrentSituation
+KeyEvents
+RelationshipChanges
+PromisesAndImportantStatements
+UnresolvedMatters
+PersistentState
+```
+
+It does not contain persistence metadata such as `Id`, `CreatedAt`, `UpdatedAt`, or `Revision`.
+
+Draft generation is read-only:
+
+```text
+ChatSession.Messages is not mutated.
+ChatSession.Summaries is not mutated.
+Repository SaveAsync is not called.
+```
+
+Range validation reuses `ConversationSummaryService.ValidateRange`. New summary generation rejects overlap with existing summaries. Regeneration can pass the existing summary id as `ignoreSummaryId` so that the summary's own range is allowed while overlap with other summaries is still rejected.
+
+The AI request source is only the selected raw `ChatSession.Messages` range. It does not include lore, historical context, existing summaries, world settings, character prompt fields, or current-chat user wrapping. `Character.Name` is used only as the assistant speaker label in the transcript.
+
+The selected transcript is rendered with XML-like delimiters, and transcript data values are escaped at request time. Raw domain message content is not encoded or saved.
+
+The AI response is requested with a provider-independent structured JSON schema containing exactly:
+
+```text
+title
+currentSituation
+keyEvents
+relationshipChanges
+promisesAndImportantStatements
+unresolvedMatters
+persistentState
+```
+
+All fields are required strings and `additionalProperties` is false. The schema does not use `maxLength`; title length is validated in Application using the same 40-character rule as persisted summaries.
+
+Empty summary section values are normalized to:
+
+```text
+없음
+```
+
+Empty titles, titles longer than 40 characters, JSON parse failures, API failures, and cancellations all return a generation result without changing domain data.
+
 ## Old Unsummarized Count
 
 `HistoricalContextBuilder` counts only historical raw messages that were not replaced by a summary.
@@ -112,12 +168,10 @@ OldUnsummarizedWarningThreshold = 20
 
 3-A does not show a WPF warning banner yet. It only exposes the count and warning boolean through context metadata.
 
-## Not Implemented In 3-A
+## Not Implemented Yet
 
 The following are intentionally not implemented yet:
 
-- AI summary generation
-- Summary draft
 - Summary preview window
 - Summary management window
 - Message range selection UI

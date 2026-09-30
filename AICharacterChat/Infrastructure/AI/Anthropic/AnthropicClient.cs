@@ -44,7 +44,16 @@ namespace AICharacterChat.Infrastructure.AI.Anthropic
                 {
                     Role = m.Role == ChatRole.User ? "user" : "assistant",
                     Content = m.Content
-                }).ToList()
+                }).ToList(),
+                OutputConfig = request.ResponseFormat == null
+                    ? null
+                    : new AnthropicOutputConfig
+                    {
+                        Format = new AnthropicOutputFormat
+                        {
+                            Schema = request.ResponseFormat.Schema
+                        }
+                    }
             };
 
             string json = JsonConvert.SerializeObject(anthropicRequest);

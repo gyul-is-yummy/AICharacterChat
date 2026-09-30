@@ -16,6 +16,9 @@ namespace AICharacterChat.Infrastructure.AI.Anthropic
 
         [JsonProperty("messages")]
         public List<AnthropicMessage> Messages { get; set; } = new();
+
+        [JsonProperty("output_config", NullValueHandling = NullValueHandling.Ignore)]
+        public AnthropicOutputConfig? OutputConfig { get; set; }
     }
 
     public class AnthropicMessage
@@ -25,5 +28,20 @@ namespace AICharacterChat.Infrastructure.AI.Anthropic
 
         [JsonProperty("content")]
         public string Content { get; set; } = "";
+    }
+
+    public class AnthropicOutputConfig
+    {
+        [JsonProperty("format")]
+        public AnthropicOutputFormat Format { get; set; } = new();
+    }
+
+    public class AnthropicOutputFormat
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; } = "json_schema";
+
+        [JsonProperty("schema")]
+        public object Schema { get; set; } = new();
     }
 }
