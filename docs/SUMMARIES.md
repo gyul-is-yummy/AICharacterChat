@@ -181,7 +181,13 @@ The persistence service validates that the `ChatSession` belongs to the supplied
 
 Disk atomicity remains the responsibility of `JsonWorldRepository` and `JsonFileWriter`, which write through a temporary file and replace or move the final JSON file.
 
-Duplicate `ConversationSummary.Id` values from externally edited JSON are not automatically repaired yet. Validation/recovery remains deferred until before Summary Management UI.
+`ConversationSummary.Id` is a session-local persisted identity. After `JsonWorldRepository.LoadAsync` succeeds, every `ConversationSummary.Id` in a single `ChatSession.Summaries` list is non-empty and unique within that session.
+
+If externally edited JSON contains duplicate summary ids or `Guid.Empty` summary ids, the persistence load boundary repairs only the affected ids. The first valid occurrence in each session keeps its id, later duplicates receive new `Guid` values, and `Guid.Empty` values receive new non-empty `Guid` values. The repair preserves summary order, range, title, section content, timestamps, and revision.
+
+When identity repair changes data during load, the repaired `WorldStore` is immediately persisted through the normal `JsonWorldRepository.SaveAsync` and `JsonFileWriter` atomic write path. Normal current-format loads with no identity repair are not rewritten for this reason.
+
+Duplicate `ChatMessage.Id` validation/recovery remains a separate backlog item.
 
 ## Message Range Selection
 

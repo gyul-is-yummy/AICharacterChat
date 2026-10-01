@@ -22,26 +22,34 @@ namespace AICharacterChat.Infrastructure.Persistence
         {
             _paths.EnsureDirectories();
 
+            WorldStore store;
+            var shouldSave = false;
+
             if (File.Exists(_paths.WorldStorePath))
             {
                 string json = await File.ReadAllTextAsync(_paths.WorldStorePath, cancellationToken);
-                var store = JsonConvert.DeserializeObject<WorldStore>(json) ?? CreateDefaultStore();
-                EnsureRuntimeDefaults(store);
-                return store;
+                store = JsonConvert.DeserializeObject<WorldStore>(json) ?? CreateDefaultStore();
             }
-
-            if (File.Exists(_paths.LegacyWorldsPath))
+            else if (File.Exists(_paths.LegacyWorldsPath))
             {
-                var migrated = await _legacyDataMigrator.MigrateFileAsync(
+                store = await _legacyDataMigrator.MigrateFileAsync(
                     _paths.LegacyWorldsPath,
                     cancellationToken);
-                await SaveAsync(migrated, cancellationToken);
-                return migrated;
+                shouldSave = true;
+            }
+            else
+            {
+                store = CreateDefaultStore();
+                shouldSave = true;
             }
 
-            var defaultStore = CreateDefaultStore();
-            await SaveAsync(defaultStore, cancellationToken);
-            return defaultStore;
+            EnsureRuntimeDefaults(store);
+            bool repaired = ConversationSummaryIdentityRepairer.Repair(store);
+
+            if (shouldSave || repaired)
+                await SaveAsync(store, cancellationToken);
+
+            return store;
         }
 
         public async Task SaveAsync(WorldStore store, CancellationToken cancellationToken = default)

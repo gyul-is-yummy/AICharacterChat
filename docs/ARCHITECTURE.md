@@ -86,6 +86,16 @@ SummaryDraft or selected ConversationSummary
 
 Summary generation and regeneration remain draft-only. Regeneration targets an existing `ConversationSummary` object, uses its original message range, and does not mutate or save the target summary.
 
+## Summary Identity Load Normalization
+
+`JsonWorldRepository.LoadAsync` normalizes persisted summary identity before returning a `WorldStore` to Presentation. After deserialization or legacy migration and runtime defaults, each `ChatSession.Summaries` list is repaired so that `ConversationSummary.Id` values are non-empty and unique within that session.
+
+The repair is an Infrastructure persistence detail. It does not call `ConversationSummaryService`, does not expose a public Application API, and does not run from `MainViewModel` or Summary Management UI.
+
+Only identity corruption is repaired. Duplicate ids keep the first valid occurrence and reassign later duplicates; `Guid.Empty` is reassigned. Summary order, message range, content sections, timestamps, and revision are preserved. Different sessions may still contain the same summary id because the invariant is session-local.
+
+If repair changes any id, `JsonWorldRepository` persists the repaired store through the existing `SaveAsync` path, which uses `JsonFileWriter` for atomic file replacement. If no identity repair occurs, current-format load does not save only for this normalization step.
+
 ## Summary Range Selection
 
 Message range selection lives in Presentation. `MainViewModel` owns the transient selection mode, selected message references, validation state, and commands. `ChatMessageItemViewModel` is a rendering projection over each domain `ChatMessage`; it carries only visual selection flags.
