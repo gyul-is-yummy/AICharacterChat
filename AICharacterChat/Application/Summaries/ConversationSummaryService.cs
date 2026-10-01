@@ -131,14 +131,13 @@ namespace AICharacterChat.Application.Summaries
         public SummaryServiceResult ValidateRange(
             ChatSession session,
             Guid startMessageId,
-            Guid endMessageId,
-            Guid? ignoreSummaryId = null)
+            Guid endMessageId)
         {
             return ValidateRange(
                 session,
                 startMessageId,
                 endMessageId,
-                summary => summary.Id == ignoreSummaryId);
+                _ => false);
         }
 
         public SummaryServiceResult ValidateRange(

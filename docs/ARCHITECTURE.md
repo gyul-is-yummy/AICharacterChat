@@ -94,6 +94,27 @@ The domain source of truth remains `SelectedChatSession.Messages`. Selection sta
 
 Range validation reuses `ConversationSummaryService.ValidateRange`. The selection UI does not call `ConversationSummarizer`, does not save summaries, and does not use the summary persistence workflow.
 
+## Summary Preview Flow
+
+Summary Preview connects the selected message range to user-controlled summary creation.
+
+```text
+MainViewModel valid range
+-> SummaryPreviewRequested event
+-> MainWindow opens modal SummaryPreviewWindow
+-> SummaryPreviewViewModel.GenerateNewDraftAsync
+-> editable preview fields
+-> ConversationSummaryPersistenceService.AddAsync on Save
+```
+
+`MainViewModel` does not construct WPF windows. It raises a Presentation event with a `SummaryPreviewRequest` that captures the current `WorldStore`, `ChatSession`, `Character`, selected range ids, and model id. `MainWindow`, as the composition root, creates the preview ViewModel and modal window.
+
+`SummaryPreviewViewModel` depends on `ConversationSummarizer`, `ConversationSummaryPersistenceService`, and the captured request. It does not depend on Anthropic, repositories, or WPF window types directly.
+
+Initial generation and preview regeneration use `ConversationSummarizer.GenerateNewDraftAsync` and remain read-only. Edited preview fields are Presentation-only state until Save. Save is the only point where `ChatSession.Summaries` may change, and it goes through `ConversationSummaryPersistenceService.AddAsync`.
+
+Canceling the modal preview preserves the selected range in `MainViewModel`. A successful Save returns `Saved` to `MainViewModel`, which clears the transient selection state without refreshing messages.
+
 ## Current Boundaries
 
 `MainWindow` is MVVM-backed through `MainViewModel`. The code-behind constructs dependencies, opens dialogs, handles Enter-to-send, and scrolls the chat view.

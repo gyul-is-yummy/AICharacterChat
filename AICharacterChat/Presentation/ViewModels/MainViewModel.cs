@@ -9,6 +9,7 @@ using AICharacterChat.Application.Models;
 using AICharacterChat.Application.Summaries;
 using AICharacterChat.Domain.Enums;
 using AICharacterChat.Domain.Models;
+using AICharacterChat.Presentation.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -50,6 +51,7 @@ namespace AICharacterChat.Presentation.ViewModels
         public ICommand ClearChatCommand { get; }
         public IRelayCommand BeginSummarySelectionCommand { get; }
         public IRelayCommand<ChatMessageItemViewModel> SelectSummaryMessageCommand { get; }
+        public IRelayCommand OpenSummaryPreviewCommand { get; }
         public IRelayCommand ResetSummarySelectionCommand { get; }
         public IRelayCommand CancelSummarySelectionCommand { get; }
 
@@ -75,11 +77,13 @@ namespace AICharacterChat.Presentation.ViewModels
             ClearChatCommand = new AsyncRelayCommand<Character>(ClearChatForCharacterAsync);
             BeginSummarySelectionCommand = new RelayCommand(BeginSummarySelection, CanBeginSummarySelection);
             SelectSummaryMessageCommand = new RelayCommand<ChatMessageItemViewModel>(SelectSummaryMessage);
+            OpenSummaryPreviewCommand = new RelayCommand(OpenSummaryPreview, CanOpenSummaryPreview);
             ResetSummarySelectionCommand = new RelayCommand(ResetSummarySelection);
             CancelSummarySelectionCommand = new RelayCommand(CancelSummarySelection);
         }
 
         private readonly ConversationSummaryService _summaryService;
+        public event EventHandler<SummaryPreviewRequestedEventArgs>? SummaryPreviewRequested;
 
         public WorldStore Store => _store;
 
@@ -99,14 +103,21 @@ namespace AICharacterChat.Presentation.ViewModels
             private set
             {
                 if (SetProperty(ref _selectedCharacter, value))
+                {
                     OnPropertyChanged(nameof(SelectedCharacterName));
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                }
             }
         }
 
         public ChatSession? SelectedChatSession
         {
             get => _selectedChatSession;
-            private set => SetProperty(ref _selectedChatSession, value);
+            private set
+            {
+                if (SetProperty(ref _selectedChatSession, value))
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+            }
         }
 
         public ChatModelOption? SelectedModel
@@ -114,8 +125,12 @@ namespace AICharacterChat.Presentation.ViewModels
             get => _selectedModel;
             set
             {
-                if (SetProperty(ref _selectedModel, value) && value != null)
-                    _settings.SelectedModel = value.Id;
+                if (SetProperty(ref _selectedModel, value))
+                {
+                    if (value != null)
+                        _settings.SelectedModel = value.Id;
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                }
             }
         }
 
@@ -138,6 +153,7 @@ namespace AICharacterChat.Presentation.ViewModels
                 {
                     SendMessageCommand.NotifyCanExecuteChanged();
                     BeginSummarySelectionCommand.NotifyCanExecuteChanged();
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -163,6 +179,7 @@ namespace AICharacterChat.Presentation.ViewModels
                     OnPropertyChanged(nameof(CanShowBeginSummarySelection));
                     SendMessageCommand.NotifyCanExecuteChanged();
                     BeginSummarySelectionCommand.NotifyCanExecuteChanged();
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -209,6 +226,7 @@ namespace AICharacterChat.Presentation.ViewModels
                 {
                     OnPropertyChanged(nameof(HasSummarySelectionError));
                     OnPropertyChanged(nameof(IsSummarySelectionValid));
+                    OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -583,6 +601,91 @@ namespace AICharacterChat.Presentation.ViewModels
             UpdateSummarySelectionVisuals();
         }
 
+        private void OpenSummaryPreview()
+        {
+            if (!TryCreateSummaryPreviewRequest(out var request, out string errorMessage))
+            {
+                SummarySelectionError = errorMessage;
+                NotifySelectionStateChanged();
+                UpdateSummarySelectionVisuals();
+                return;
+            }
+
+            var args = new SummaryPreviewRequestedEventArgs(request);
+            SummaryPreviewRequested?.Invoke(this, args);
+
+            if (args.Result == SummaryPreviewResult.Saved)
+                CancelSummarySelection();
+        }
+
+        private bool CanOpenSummaryPreview()
+        {
+            return !IsSending &&
+                   SelectedCharacter != null &&
+                   SelectedChatSession != null &&
+                   SelectedModel != null &&
+                   IsSummarySelectionValid;
+        }
+
+        private bool TryCreateSummaryPreviewRequest(
+            out SummaryPreviewRequest request,
+            out string errorMessage)
+        {
+            request = null!;
+            errorMessage = "";
+
+            if (SelectedChatSession == null)
+            {
+                errorMessage = "선택된 대화 세션이 없습니다.";
+                return false;
+            }
+
+            if (SelectedCharacter == null)
+            {
+                errorMessage = "선택된 캐릭터가 없습니다.";
+                return false;
+            }
+
+            if (SelectedModel == null)
+            {
+                errorMessage = "선택된 모델이 없습니다.";
+                return false;
+            }
+
+            if (_summarySelectionStartMessage == null || _summarySelectionEndMessage == null)
+            {
+                errorMessage = "요약할 메시지 범위를 선택해주세요.";
+                return false;
+            }
+
+            int startIndex = FindMessageReferenceIndex(_summarySelectionStartMessage);
+            int endIndex = FindMessageReferenceIndex(_summarySelectionEndMessage);
+            if (startIndex < 0 || endIndex < 0)
+            {
+                errorMessage = "선택한 메시지를 현재 대화에서 찾을 수 없습니다.";
+                return false;
+            }
+
+            var validation = _summaryService.ValidateRange(
+                SelectedChatSession,
+                _summarySelectionStartMessage.Id,
+                _summarySelectionEndMessage.Id);
+            if (!validation.IsSuccess)
+            {
+                errorMessage = validation.ErrorMessage ?? "요약 범위가 올바르지 않습니다.";
+                return false;
+            }
+
+            request = new SummaryPreviewRequest(
+                _store,
+                SelectedChatSession,
+                SelectedCharacter,
+                _summarySelectionStartMessage.Id,
+                _summarySelectionEndMessage.Id,
+                SelectedModel.Id);
+            return true;
+        }
+
         private void ResetSummarySelection()
         {
             if (!IsSummarySelectionMode)
@@ -658,12 +761,14 @@ namespace AICharacterChat.Presentation.ViewModels
             OnPropertyChanged(nameof(HasSummarySelectionRange));
             OnPropertyChanged(nameof(IsSummarySelectionValid));
             OnPropertyChanged(nameof(SummarySelectionStatusText));
+            OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
         }
 
         private void NotifyMessageStateChanged()
         {
             OnPropertyChanged(nameof(HasMessages));
             BeginSummarySelectionCommand.NotifyCanExecuteChanged();
+            OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
         }
     }
 }

@@ -195,7 +195,45 @@ Range validation reuses `ConversationSummaryService.ValidateRange`, so existing 
 
 Sending a new chat message is disabled while selection mode is active. Session changes and Clear Chat clear the transient selection state.
 
-3-B.3 does not call AI summary generation, open a preview, or save summaries.
+## Summary Preview
+
+After a valid range is selected, the chat screen can open a modal Summary Preview workflow.
+
+```text
+Message range selection
+-> SummaryPreviewRequest
+-> modal preview window
+-> AI draft generation
+-> editable preview fields
+-> explicit Save
+-> ConversationSummaryPersistenceService.AddAsync
+```
+
+`SummaryPreviewRequest` is Presentation workflow context, not persisted data. It captures the current `WorldStore`, `ChatSession`, `Character`, selected start/end message ids, and the selected model id when the user clicks Next.
+
+The preview opens before AI generation completes and shows a loading state inside the modal window. Initial generation and regeneration both use `ConversationSummarizer.GenerateNewDraftAsync` with the captured message range and model id. `RegenerateDraftAsync` remains reserved for existing saved summaries.
+
+AI generation and regeneration remain read-only. They do not mutate `ChatSession.Messages`, do not add to `ChatSession.Summaries`, and do not save repositories.
+
+The preview fields are editable Presentation state:
+
+```text
+Title
+CurrentSituation
+KeyEvents
+RelationshipChanges
+PromisesAndImportantStatements
+UnresolvedMatters
+PersistentState
+```
+
+The selected range is immutable in the preview. To change it, the user cancels the preview and changes the message range selection.
+
+Saving is user-controlled. AI output is never auto-saved. Only clicking Save builds a new `SummaryDraft` from the edited fields and calls `ConversationSummaryPersistenceService.AddAsync`.
+
+If preview generation fails, the preview remains open and the selected range in the main window is preserved. If regeneration fails, the current editable fields are preserved. If save fails, the preview remains open, edited fields are preserved, and persistence rollback is handled by `ConversationSummaryPersistenceService`.
+
+Canceling the preview or closing it with X does not persist anything and returns to the existing message range selection. Saving successfully closes the preview and clears the transient selection state.
 
 ## Old Unsummarized Count
 
@@ -213,7 +251,6 @@ OldUnsummarizedWarningThreshold = 20
 
 The following are intentionally not implemented yet:
 
-- Summary preview window
 - Summary management window
 - Warning banner UI
 - Regeneration UI

@@ -7,6 +7,7 @@ using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Models;
 using AICharacterChat.Domain.Enums;
 using AICharacterChat.Domain.Models;
+using AICharacterChat.Presentation.Models;
 using AICharacterChat.Presentation.ViewModels;
 using Xunit;
 
@@ -193,6 +194,127 @@ namespace AICharacterChat.Tests
 
             Assert.True(vm.BeginSummarySelectionCommand.CanExecute(null));
             Assert.True(canExecuteChangedCount >= 2);
+        }
+
+        [Fact]
+        public async Task NextDisabledWithoutCompletedRange()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+
+            Assert.False(vm.OpenSummaryPreviewCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task NextDisabledForInvalidOverlap()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 4);
+            world.ChatSessions[0].Summaries.Add(new ConversationSummary
+            {
+                StartMessageId = world.ChatSessions[0].Messages[1].Id,
+                EndMessageId = world.ChatSessions[0].Messages[2].Id,
+                Title = "기존 요약"
+            });
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[3]);
+
+            Assert.False(vm.OpenSummaryPreviewCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task NextRaisesPreviewRequestForValidRange()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 3);
+            var store = new WorldStore { ActiveWorldId = world.Id, Worlds = [world] };
+            var vm = CreateViewModel(store);
+            await vm.InitializeAsync();
+            SummaryPreviewRequest? request = null;
+            vm.SummaryPreviewRequested += (_, e) =>
+            {
+                request = e.Request;
+                e.Result = SummaryPreviewResult.Canceled;
+            };
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+            vm.OpenSummaryPreviewCommand.Execute(null);
+
+            Assert.NotNull(request);
+            Assert.Same(store, request!.Store);
+            Assert.Same(world.ChatSessions[0], request.Session);
+            Assert.Same(world.Characters[0], request.Character);
+            Assert.Equal(world.ChatSessions[0].Messages[0].Id, request.StartMessageId);
+            Assert.Equal(world.ChatSessions[0].Messages[2].Id, request.EndMessageId);
+            Assert.Equal("model", request.ModelId);
+        }
+
+        [Fact]
+        public async Task NextRevalidatesRangeBeforeRequest()
+        {
+            var world = TestData.CreateWorld();
+            AddMessages(world.ChatSessions[0], 4);
+            var session = world.ChatSessions[0];
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            var requestRaised = false;
+            vm.SummaryPreviewRequested += (_, _) => requestRaised = true;
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[3]);
+            session.Summaries.Add(new ConversationSummary
+            {
+                StartMessageId = session.Messages[1].Id,
+                EndMessageId = session.Messages[2].Id,
+                Title = "늦게 추가된 요약"
+            });
+            vm.OpenSummaryPreviewCommand.Execute(null);
+
+            Assert.False(requestRaised);
+            Assert.Contains("겹칩니다", vm.SummarySelectionError);
+        }
+
+        [Fact]
+        public async Task PreviewSavedClearsSelection()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+            vm.SummaryPreviewRequested += (_, e) => e.Result = SummaryPreviewResult.Saved;
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+            vm.OpenSummaryPreviewCommand.Execute(null);
+
+            Assert.False(vm.IsSummarySelectionMode);
+            Assert.Null(vm.SummarySelectionStartMessageId);
+            Assert.Null(vm.SummarySelectionEndMessageId);
+            Assert.All(vm.MessageItems, item => Assert.False(item.IsInSummarySelectionRange));
+        }
+
+        [Fact]
+        public async Task PreviewCanceledRetainsSelection()
+        {
+            var vm = await CreateInitializedViewModelWithMessagesAsync(3);
+            vm.SummaryPreviewRequested += (_, e) => e.Result = SummaryPreviewResult.Canceled;
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[2]);
+            vm.OpenSummaryPreviewCommand.Execute(null);
+
+            Assert.True(vm.IsSummarySelectionMode);
+            Assert.NotNull(vm.SummarySelectionStartMessageId);
+            Assert.NotNull(vm.SummarySelectionEndMessageId);
+            Assert.Equal(3, vm.SummarySelectionMessageCount);
         }
 
         [Fact]

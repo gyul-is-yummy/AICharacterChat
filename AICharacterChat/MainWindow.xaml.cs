@@ -10,6 +10,7 @@ using AICharacterChat.Application.Summaries;
 using AICharacterChat.Domain.Models;
 using AICharacterChat.Infrastructure.AI.Anthropic;
 using AICharacterChat.Infrastructure.Persistence;
+using AICharacterChat.Presentation.Models;
 using AICharacterChat.Presentation.ViewModels;
 
 namespace AICharacterChat
@@ -17,6 +18,8 @@ namespace AICharacterChat
     public partial class MainWindow : Window
     {
         private readonly MainViewModel _viewModel;
+        private readonly ConversationSummarizer _conversationSummarizer;
+        private readonly ConversationSummaryPersistenceService _summaryPersistenceService;
         private bool _isScrollToBottomQueued;
 
         public MainWindow()
@@ -38,6 +41,8 @@ namespace AICharacterChat
                 recentMessageSelector,
                 historicalContextBuilder);
             var summaryService = new ConversationSummaryService();
+            _conversationSummarizer = new ConversationSummarizer(chatClient, summaryService);
+            _summaryPersistenceService = new ConversationSummaryPersistenceService(summaryService, worldRepository);
             var chatService = new ChatService(
                 chatClient,
                 worldRepository,
@@ -50,6 +55,7 @@ namespace AICharacterChat
                 chatService,
                 summaryService);
             _viewModel.MessageItems.CollectionChanged += (_, _) => QueueScrollToBottom();
+            _viewModel.SummaryPreviewRequested += ViewModel_SummaryPreviewRequested;
             DataContext = _viewModel;
         }
 
@@ -69,6 +75,17 @@ namespace AICharacterChat
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
             await _viewModel.InitializeAsync();
+        }
+
+        private void ViewModel_SummaryPreviewRequested(object? sender, SummaryPreviewRequestedEventArgs e)
+        {
+            var viewModel = new SummaryPreviewViewModel(
+                _conversationSummarizer,
+                _summaryPersistenceService,
+                e.Request);
+            var window = new SummaryPreviewWindow(viewModel) { Owner = this };
+            window.ShowDialog();
+            e.Result = window.Result;
         }
 
         private async void InputBox_KeyDown(object sender, KeyEventArgs e)

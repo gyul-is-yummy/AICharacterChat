@@ -263,6 +263,16 @@
                         <StackPanel DockPanel.Dock="Right"
                                     Orientation="Horizontal"
                                     Margin="8,0,0,0">
+                            <Button Content="다음"
+                                    Padding="8,3"
+                                    Margin="0,0,5,0"
+                                    Background="#2c4b7a"
+                                    Foreground="#e8f2ff"
+                                    BorderBrush="#80c7ff"
+                                    BorderThickness="1"
+                                    FontSize="12"
+                                    Cursor="Hand"
+                                    Command="{Binding OpenSummaryPreviewCommand}"/>
                             <Button Content="선택 다시 하기"
                                     Padding="8,3"
                                     Margin="0,0,5,0"
