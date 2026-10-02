@@ -52,6 +52,7 @@ namespace AICharacterChat.Presentation.ViewModels
         public IRelayCommand BeginSummarySelectionCommand { get; }
         public IRelayCommand<ChatMessageItemViewModel> SelectSummaryMessageCommand { get; }
         public IRelayCommand OpenSummaryPreviewCommand { get; }
+        public IRelayCommand OpenSummaryManagementCommand { get; }
         public IRelayCommand ResetSummarySelectionCommand { get; }
         public IRelayCommand CancelSummarySelectionCommand { get; }
 
@@ -78,12 +79,14 @@ namespace AICharacterChat.Presentation.ViewModels
             BeginSummarySelectionCommand = new RelayCommand(BeginSummarySelection, CanBeginSummarySelection);
             SelectSummaryMessageCommand = new RelayCommand<ChatMessageItemViewModel>(SelectSummaryMessage);
             OpenSummaryPreviewCommand = new RelayCommand(OpenSummaryPreview, CanOpenSummaryPreview);
+            OpenSummaryManagementCommand = new RelayCommand(OpenSummaryManagement, CanOpenSummaryManagement);
             ResetSummarySelectionCommand = new RelayCommand(ResetSummarySelection);
             CancelSummarySelectionCommand = new RelayCommand(CancelSummarySelection);
         }
 
         private readonly ConversationSummaryService _summaryService;
         public event EventHandler<SummaryPreviewRequestedEventArgs>? SummaryPreviewRequested;
+        public event EventHandler<SummaryManagementRequestedEventArgs>? SummaryManagementRequested;
 
         public WorldStore Store => _store;
 
@@ -106,6 +109,7 @@ namespace AICharacterChat.Presentation.ViewModels
                 {
                     OnPropertyChanged(nameof(SelectedCharacterName));
                     OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                    OpenSummaryManagementCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -116,7 +120,10 @@ namespace AICharacterChat.Presentation.ViewModels
             private set
             {
                 if (SetProperty(ref _selectedChatSession, value))
+                {
                     OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                    OpenSummaryManagementCommand.NotifyCanExecuteChanged();
+                }
             }
         }
 
@@ -130,6 +137,7 @@ namespace AICharacterChat.Presentation.ViewModels
                     if (value != null)
                         _settings.SelectedModel = value.Id;
                     OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                    OpenSummaryManagementCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -154,6 +162,7 @@ namespace AICharacterChat.Presentation.ViewModels
                     SendMessageCommand.NotifyCanExecuteChanged();
                     BeginSummarySelectionCommand.NotifyCanExecuteChanged();
                     OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+                    OpenSummaryManagementCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -627,6 +636,41 @@ namespace AICharacterChat.Presentation.ViewModels
                    IsSummarySelectionValid;
         }
 
+        private void OpenSummaryManagement()
+        {
+            if (!TryCreateSummaryManagementRequest(out var request))
+                return;
+
+            SummaryManagementRequested?.Invoke(this, new SummaryManagementRequestedEventArgs(request));
+        }
+
+        private bool CanOpenSummaryManagement()
+        {
+            return !IsSending &&
+                   SelectedCharacter != null &&
+                   SelectedChatSession != null &&
+                   SelectedModel != null;
+        }
+
+        private bool TryCreateSummaryManagementRequest(out SummaryManagementRequest request)
+        {
+            request = null!;
+
+            if (SelectedChatSession == null ||
+                SelectedCharacter == null ||
+                SelectedModel == null)
+            {
+                return false;
+            }
+
+            request = new SummaryManagementRequest(
+                _store,
+                SelectedChatSession,
+                SelectedCharacter,
+                SelectedModel.Id);
+            return true;
+        }
+
         private bool TryCreateSummaryPreviewRequest(
             out SummaryPreviewRequest request,
             out string errorMessage)
@@ -762,6 +806,7 @@ namespace AICharacterChat.Presentation.ViewModels
             OnPropertyChanged(nameof(IsSummarySelectionValid));
             OnPropertyChanged(nameof(SummarySelectionStatusText));
             OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+            OpenSummaryManagementCommand.NotifyCanExecuteChanged();
         }
 
         private void NotifyMessageStateChanged()
@@ -769,6 +814,7 @@ namespace AICharacterChat.Presentation.ViewModels
             OnPropertyChanged(nameof(HasMessages));
             BeginSummarySelectionCommand.NotifyCanExecuteChanged();
             OpenSummaryPreviewCommand.NotifyCanExecuteChanged();
+            OpenSummaryManagementCommand.NotifyCanExecuteChanged();
         }
     }
 }

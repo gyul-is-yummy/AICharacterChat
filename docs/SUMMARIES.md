@@ -241,6 +241,42 @@ If preview generation fails, the preview remains open and the selected range in 
 
 Canceling the preview or closing it with X does not persist anything and returns to the existing message range selection. Saving successfully closes the preview and clears the transient selection state.
 
+## Summary Management
+
+The chat screen can open a modal Summary Management workflow for the current `ChatSession`.
+
+```text
+MainViewModel
+-> SummaryManagementRequest
+-> modal management window
+-> editable Presentation buffer
+-> ConversationSummaryPersistenceService.UpdateAsync on Save
+```
+
+`SummaryManagementRequest` captures the current `WorldStore`, `ChatSession`, `Character`, and selected model id. The management workflow edits only summaries that already exist in the captured session.
+
+`SummaryManagementItemViewModel` is a Presentation-only wrapper around a persisted `ConversationSummary`. It keeps the exact domain object reference so update persistence targets the selected summary object, not the first matching id.
+
+The editor uses a separate editable buffer for:
+
+```text
+Title
+CurrentSituation
+KeyEvents
+RelationshipChanges
+PromisesAndImportantStatements
+UnresolvedMatters
+PersistentState
+```
+
+Changing these fields does not mutate the domain summary until Save succeeds. Save builds a `SummaryDraft` from the buffer, preserves the summary range, and calls `ConversationSummaryPersistenceService.UpdateAsync`.
+
+If save succeeds, the selected item refreshes its displayed title and update time. If save fails, the management window remains open, the current selection is preserved, the edited buffer is preserved, and rollback is handled by `ConversationSummaryPersistenceService`.
+
+While a selected summary has unsaved edits, selecting another summary is blocked and closing the window asks whether to discard changes. Saving disables list interaction, editing, duplicate saves, and discard until the operation completes.
+
+The management window shows an empty state when the current session has no summaries. It does not create summaries, regenerate summaries with AI, delete summaries, or manage summaries from other chat sessions.
+
 ## Old Unsummarized Count
 
 `HistoricalContextBuilder` counts only historical raw messages that were not replaced by a summary.
@@ -257,10 +293,8 @@ OldUnsummarizedWarningThreshold = 20
 
 The following are intentionally not implemented yet:
 
-- Summary management window
 - Warning banner UI
 - Regeneration UI
-- Direct edit UI
 - Delete UI
 - Automatic summary
 - Long-term memory

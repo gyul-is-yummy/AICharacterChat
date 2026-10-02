@@ -125,6 +125,26 @@ Initial generation and preview regeneration use `ConversationSummarizer.Generate
 
 Canceling the modal preview preserves the selected range in `MainViewModel`. A successful Save returns `Saved` to `MainViewModel`, which clears the transient selection state without refreshing messages.
 
+## Summary Management Flow
+
+Summary Management provides a modal editor for summaries already saved in the current `ChatSession`.
+
+```text
+MainViewModel current session
+-> SummaryManagementRequested event
+-> MainWindow opens modal SummaryManagementWindow
+-> SummaryManagementViewModel editable buffer
+-> ConversationSummaryPersistenceService.UpdateAsync on Save
+```
+
+`MainViewModel` does not construct the management window. It raises a Presentation event with a `SummaryManagementRequest` that captures the current `WorldStore`, `ChatSession`, `Character`, and model id. `MainWindow`, as the composition root, creates `SummaryManagementViewModel` and the modal window.
+
+`SummaryManagementViewModel` depends on `ConversationSummaryPersistenceService` and the captured request. It does not depend on Anthropic, `ConversationSummarizer`, or WPF window types directly.
+
+`SummaryManagementItemViewModel` wraps a persisted `ConversationSummary` as a Presentation-only list item. It preserves the exact summary object reference so updates are applied to the selected object through `ConversationSummaryPersistenceService.UpdateAsync`.
+
+Editable fields are Presentation state until Save succeeds. Dirty state blocks changing the selected summary, and the window asks for confirmation before discarding unsaved edits on close. The management flow does not create, delete, or AI-regenerate summaries.
+
 ## Current Boundaries
 
 `MainWindow` is MVVM-backed through `MainViewModel`. The code-behind constructs dependencies, opens dialogs, handles Enter-to-send, and scrolls the chat view.

@@ -318,6 +318,51 @@ namespace AICharacterChat.Tests
         }
 
         [Fact]
+        public async Task SummaryManagementRequestCapturesCurrentContextEvenWithoutSummaries()
+        {
+            var world = TestData.CreateWorld();
+            world.ChatSessions[0].Summaries.Clear();
+            var store = new WorldStore { ActiveWorldId = world.Id, Worlds = [world] };
+            var vm = CreateViewModel(store);
+            await vm.InitializeAsync();
+            SummaryManagementRequest? request = null;
+            vm.SummaryManagementRequested += (_, e) => request = e.Request;
+
+            Assert.True(vm.OpenSummaryManagementCommand.CanExecute(null));
+            vm.OpenSummaryManagementCommand.Execute(null);
+
+            Assert.NotNull(request);
+            Assert.Same(store, request!.Store);
+            Assert.Same(world.ChatSessions[0], request.Session);
+            Assert.Same(world.Characters[0], request.Character);
+            Assert.Equal("model", request.ModelId);
+            Assert.Empty(world.ChatSessions[0].Summaries);
+        }
+
+        [Fact]
+        public async Task SummaryManagementIsDisabledWhileSending()
+        {
+            var world = TestData.CreateWorld();
+            world.ChatSessions[0].Messages.Add(new ChatMessage(ChatRole.User, "기존"));
+            var store = new WorldStore { ActiveWorldId = world.Id, Worlds = [world] };
+            var client = new BlockingChatModelClient();
+            var vm = CreateViewModel(store, client);
+            await vm.InitializeAsync();
+            vm.InputText = "전송 중";
+
+            var sendTask = vm.SendMessageCommand.ExecuteAsync(null);
+            await client.CallStarted.Task;
+
+            Assert.True(vm.IsSending);
+            Assert.False(vm.OpenSummaryManagementCommand.CanExecute(null));
+
+            client.Complete("답");
+            await sendTask;
+
+            Assert.True(vm.OpenSummaryManagementCommand.CanExecute(null));
+        }
+
+        [Fact]
         public async Task FirstClickSetsAnchor()
         {
             var vm = await CreateInitializedViewModelWithMessagesAsync(3);

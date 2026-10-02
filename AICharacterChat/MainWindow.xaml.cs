@@ -56,6 +56,7 @@ namespace AICharacterChat
                 summaryService);
             _viewModel.MessageItems.CollectionChanged += (_, _) => QueueScrollToBottom();
             _viewModel.SummaryPreviewRequested += ViewModel_SummaryPreviewRequested;
+            _viewModel.SummaryManagementRequested += ViewModel_SummaryManagementRequested;
             DataContext = _viewModel;
         }
 
@@ -86,6 +87,15 @@ namespace AICharacterChat
             var window = new SummaryPreviewWindow(viewModel) { Owner = this };
             window.ShowDialog();
             e.Result = window.Result;
+        }
+
+        private void ViewModel_SummaryManagementRequested(object? sender, SummaryManagementRequestedEventArgs e)
+        {
+            var viewModel = new SummaryManagementViewModel(
+                _summaryPersistenceService,
+                e.Request);
+            var window = new SummaryManagementWindow(viewModel) { Owner = this };
+            window.ShowDialog();
         }
 
         private async void InputBox_KeyDown(object sender, KeyEventArgs e)

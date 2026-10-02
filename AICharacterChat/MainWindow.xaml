@@ -240,7 +240,8 @@
             </Grid>
 
             <Grid Grid.Row="1" Margin="5,0,5,4">
-                <Grid Visibility="{Binding CanShowBeginSummarySelection, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding CanShowBeginSummarySelection, Converter={StaticResource BoolToVisibilityConverter}}">
                     <Button Content="요약 만들기"
                             HorizontalAlignment="Left"
                             Padding="10,4"
@@ -251,7 +252,18 @@
                             FontSize="12"
                             Cursor="Hand"
                             Command="{Binding BeginSummarySelectionCommand}"/>
-                </Grid>
+                    <Button Content="요약 관리"
+                            HorizontalAlignment="Left"
+                            Padding="10,4"
+                            Margin="8,0,0,0"
+                            Background="#2a213d"
+                            Foreground="#e8ddff"
+                            BorderBrush="#6f4b6f"
+                            BorderThickness="1"
+                            FontSize="12"
+                            Cursor="Hand"
+                            Command="{Binding OpenSummaryManagementCommand}"/>
+                </StackPanel>
 
                 <Border Visibility="{Binding IsSummarySelectionMode, Converter={StaticResource BoolToVisibilityConverter}}"
                         Background="#101832"
