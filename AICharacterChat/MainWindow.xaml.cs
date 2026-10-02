@@ -93,6 +93,7 @@ namespace AICharacterChat
         {
             var viewModel = new SummaryManagementViewModel(
                 _summaryPersistenceService,
+                _conversationSummarizer,
                 e.Request);
             var window = new SummaryManagementWindow(viewModel) { Owner = this };
             window.ShowDialog();

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using AICharacterChat.Application.Models;
@@ -12,9 +13,15 @@ namespace AICharacterChat.Presentation.ViewModels
     public sealed class SummaryManagementViewModel : ObservableObject
     {
         private readonly ConversationSummaryPersistenceService _persistenceService;
+        private readonly ConversationSummarizer _summarizer;
         private readonly SummaryManagementRequest _request;
+        private readonly ConversationSummaryService _summaryService = new();
+        private CancellationTokenSource? _regenerationCancellation;
         private SummaryManagementItemViewModel? _selectedItem;
+        private bool _isClosingOrClosed;
         private bool _isSaving;
+        private bool _isDeleting;
+        private bool _isRegenerating;
         private string _errorMessage = "";
         private string _editTitle = "";
         private string _editCurrentSituation = "";
@@ -26,12 +33,16 @@ namespace AICharacterChat.Presentation.ViewModels
 
         public SummaryManagementViewModel(
             ConversationSummaryPersistenceService persistenceService,
+            ConversationSummarizer summarizer,
             SummaryManagementRequest request)
         {
             _persistenceService = persistenceService;
+            _summarizer = summarizer;
             _request = request;
 
             SaveCommand = new AsyncRelayCommand(SaveAsync, CanSave);
+            RegenerateCommand = new AsyncRelayCommand(RegenerateAsync, CanRegenerate);
+            DeleteCommand = new AsyncRelayCommand(DeleteAsync, CanDelete);
             DiscardChangesCommand = new RelayCommand(DiscardChanges, CanDiscardChanges);
 
             foreach (var summary in request.Session.Summaries)
@@ -44,7 +55,12 @@ namespace AICharacterChat.Presentation.ViewModels
         public ObservableCollection<SummaryManagementItemViewModel> Summaries { get; } = new();
 
         public IAsyncRelayCommand SaveCommand { get; }
+        public IAsyncRelayCommand RegenerateCommand { get; }
+        public IAsyncRelayCommand DeleteCommand { get; }
         public IRelayCommand DiscardChangesCommand { get; }
+
+        public event EventHandler<SummaryRegenerateConfirmationRequestedEventArgs>? RegenerateConfirmationRequested;
+        public event EventHandler<SummaryDeleteConfirmationRequestedEventArgs>? DeleteConfirmationRequested;
 
         public SummaryManagementItemViewModel? SelectedItem
         {
@@ -67,6 +83,7 @@ namespace AICharacterChat.Presentation.ViewModels
         public bool HasSummaries => Summaries.Count > 0;
         public bool HasNoSummaries => !HasSummaries;
         public bool HasSelectedItem => SelectedItem != null;
+        public bool HasNoSelectionWithSummaries => HasSummaries && !HasSelectedItem;
 
         public bool IsSaving
         {
@@ -78,9 +95,45 @@ namespace AICharacterChat.Presentation.ViewModels
             }
         }
 
-        public bool IsBusy => IsSaving;
+        public bool IsDeleting
+        {
+            get => _isDeleting;
+            private set
+            {
+                if (SetProperty(ref _isDeleting, value))
+                    NotifyStateChanged();
+            }
+        }
+
+        public bool IsRegenerating
+        {
+            get => _isRegenerating;
+            private set
+            {
+                if (SetProperty(ref _isRegenerating, value))
+                    NotifyStateChanged();
+            }
+        }
+
+        public bool IsBusy => IsSaving || IsDeleting || IsRegenerating;
         public bool IsListInteractionEnabled => !IsDirty && !IsBusy;
         public bool IsEditorEnabled => HasSelectedItem && !IsBusy;
+        public bool CanRegenerateSelectedSummary =>
+            SelectedItem != null &&
+            _summaryService.ValidateRange(
+                _request.Session,
+                SelectedItem.Summary.StartMessageId,
+                SelectedItem.Summary.EndMessageId,
+                SelectedItem.Summary).IsSuccess;
+
+        public bool HasRegenerateUnavailableMessage =>
+            SelectedItem != null &&
+            !CanRegenerateSelectedSummary;
+
+        public string RegenerateUnavailableMessage =>
+            HasRegenerateUnavailableMessage
+                ? "원본 대화 범위를 찾을 수 없어 AI 재생성을 사용할 수 없습니다."
+                : "";
 
         public string ErrorMessage
         {
@@ -184,7 +237,18 @@ namespace AICharacterChat.Presentation.ViewModels
              EditUnresolvedMatters != SelectedItem.Summary.UnresolvedMatters ||
              EditPersistentState != SelectedItem.Summary.PersistentState);
 
-        public bool CanCloseWithoutConfirmation => !IsSaving && !IsDirty;
+        public bool CanCloseWithoutConfirmation => !IsSaving && !IsDeleting && !IsDirty;
+
+        public void OnWindowClosing()
+        {
+            _isClosingOrClosed = true;
+            CancelActiveRegeneration();
+        }
+
+        public void CancelActiveRegeneration()
+        {
+            _regenerationCancellation?.Cancel();
+        }
 
         private async Task SaveAsync()
         {
@@ -226,6 +290,115 @@ namespace AICharacterChat.Presentation.ViewModels
             IsTitleValid &&
             !IsBusy;
 
+        private async Task RegenerateAsync()
+        {
+            if (!CanRegenerate())
+                return;
+
+            var item = SelectedItem;
+            if (item == null)
+                return;
+
+            if (IsDirty && !ConfirmRegenerate())
+                return;
+
+            var cancellation = CreateRegenerationCancellation();
+            IsRegenerating = true;
+            ErrorMessage = "";
+
+            try
+            {
+                var result = await _summarizer.RegenerateDraftAsync(
+                    _request.Session,
+                    _request.Character,
+                    item.Summary,
+                    _request.ModelId,
+                    cancellation.Token);
+
+                if (!IsCurrentActiveRegeneration(cancellation))
+                    return;
+
+                if (result.IsCanceled)
+                    return;
+
+                if (!result.IsSuccess || result.Draft == null)
+                {
+                    ErrorMessage = result.ErrorMessage ?? "요약 재생성에 실패했습니다.";
+                    return;
+                }
+
+                ApplyDraftToEditableFields(result.Draft);
+                ErrorMessage = "";
+            }
+            finally
+            {
+                bool isCurrentOperation = ReferenceEquals(_regenerationCancellation, cancellation);
+                if (isCurrentOperation)
+                    _regenerationCancellation = null;
+
+                cancellation.Dispose();
+
+                if (!_isClosingOrClosed && isCurrentOperation)
+                    IsRegenerating = false;
+            }
+        }
+
+        private bool CanRegenerate() =>
+            !_isClosingOrClosed &&
+            SelectedItem != null &&
+            CanRegenerateSelectedSummary &&
+            !IsBusy;
+
+        private bool ConfirmRegenerate()
+        {
+            var args = new SummaryRegenerateConfirmationRequestedEventArgs();
+            RegenerateConfirmationRequested?.Invoke(this, args);
+            return args.Confirmed;
+        }
+
+        private async Task DeleteAsync()
+        {
+            if (!CanDelete() || SelectedItem == null)
+                return;
+
+            var item = SelectedItem;
+            var args = new SummaryDeleteConfirmationRequestedEventArgs(IsDirty);
+            DeleteConfirmationRequested?.Invoke(this, args);
+            if (!args.Confirmed)
+                return;
+
+            IsDeleting = true;
+            ErrorMessage = "";
+
+            try
+            {
+                var result = await _persistenceService.DeleteAsync(
+                    _request.Store,
+                    _request.Session,
+                    item.Summary,
+                    CancellationToken.None);
+
+                if (result.IsSuccess)
+                {
+                    Summaries.Remove(item);
+                    SelectItemInternal(null, clearError: true);
+                    NotifySummaryCollectionChanged();
+                    ErrorMessage = "";
+                    return;
+                }
+
+                ErrorMessage = result.ErrorMessage ?? "요약 삭제에 실패했습니다.";
+            }
+            finally
+            {
+                IsDeleting = false;
+            }
+        }
+
+        private bool CanDelete() =>
+            SelectedItem != null &&
+            !IsBusy;
+
         private void DiscardChanges()
         {
             if (!CanDiscardChanges() || SelectedItem == null)
@@ -242,16 +415,26 @@ namespace AICharacterChat.Presentation.ViewModels
 
         private void SelectItem(SummaryManagementItemViewModel? item)
         {
+            SelectItemInternal(item, clearError: true);
+        }
+
+        private void SelectItemInternal(SummaryManagementItemViewModel? item, bool clearError)
+        {
             if (SetProperty(ref _selectedItem, item, nameof(SelectedItem)))
             {
-                ErrorMessage = "";
+                if (clearError)
+                    ErrorMessage = "";
                 if (item != null)
                     LoadEditableFields(item);
                 else
                     ClearEditableFields();
 
                 OnPropertyChanged(nameof(HasSelectedItem));
+                OnPropertyChanged(nameof(HasNoSelectionWithSummaries));
                 OnPropertyChanged(nameof(IsEditorEnabled));
+                OnPropertyChanged(nameof(CanRegenerateSelectedSummary));
+                OnPropertyChanged(nameof(HasRegenerateUnavailableMessage));
+                OnPropertyChanged(nameof(RegenerateUnavailableMessage));
                 NotifyEditStateChanged();
             }
         }
@@ -294,12 +477,48 @@ namespace AICharacterChat.Presentation.ViewModels
                 PersistentState = EditPersistentState
             };
 
+        private void ApplyDraftToEditableFields(SummaryDraft draft)
+        {
+            EditTitle = draft.Title;
+            EditCurrentSituation = draft.CurrentSituation;
+            EditKeyEvents = draft.KeyEvents;
+            EditRelationshipChanges = draft.RelationshipChanges;
+            EditPromisesAndImportantStatements = draft.PromisesAndImportantStatements;
+            EditUnresolvedMatters = draft.UnresolvedMatters;
+            EditPersistentState = draft.PersistentState;
+            NotifyEditStateChanged();
+        }
+
+        private CancellationTokenSource CreateRegenerationCancellation()
+        {
+            _regenerationCancellation?.Cancel();
+            _regenerationCancellation?.Dispose();
+            _regenerationCancellation = new CancellationTokenSource();
+            return _regenerationCancellation;
+        }
+
+        private bool IsCurrentActiveRegeneration(CancellationTokenSource cancellation)
+        {
+            return !_isClosingOrClosed &&
+                   !cancellation.IsCancellationRequested &&
+                   ReferenceEquals(_regenerationCancellation, cancellation);
+        }
+
+        private void NotifySummaryCollectionChanged()
+        {
+            OnPropertyChanged(nameof(HasSummaries));
+            OnPropertyChanged(nameof(HasNoSummaries));
+            OnPropertyChanged(nameof(HasNoSelectionWithSummaries));
+        }
+
         private void NotifyEditStateChanged()
         {
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(CanCloseWithoutConfirmation));
             OnPropertyChanged(nameof(IsListInteractionEnabled));
             SaveCommand.NotifyCanExecuteChanged();
+            RegenerateCommand.NotifyCanExecuteChanged();
+            DeleteCommand.NotifyCanExecuteChanged();
             DiscardChangesCommand.NotifyCanExecuteChanged();
         }
 
@@ -310,6 +529,8 @@ namespace AICharacterChat.Presentation.ViewModels
             OnPropertyChanged(nameof(IsListInteractionEnabled));
             OnPropertyChanged(nameof(IsEditorEnabled));
             SaveCommand.NotifyCanExecuteChanged();
+            RegenerateCommand.NotifyCanExecuteChanged();
+            DeleteCommand.NotifyCanExecuteChanged();
             DiscardChangesCommand.NotifyCanExecuteChanged();
         }
     }

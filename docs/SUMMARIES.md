@@ -250,7 +250,9 @@ MainViewModel
 -> SummaryManagementRequest
 -> modal management window
 -> editable Presentation buffer
+-> ConversationSummarizer.RegenerateDraftAsync on AI regenerate
 -> ConversationSummaryPersistenceService.UpdateAsync on Save
+-> ConversationSummaryPersistenceService.DeleteAsync on Delete
 ```
 
 `SummaryManagementRequest` captures the current `WorldStore`, `ChatSession`, `Character`, and selected model id. The management workflow edits only summaries that already exist in the captured session.
@@ -273,9 +275,21 @@ Changing these fields does not mutate the domain summary until Save succeeds. Sa
 
 If save succeeds, the selected item refreshes its displayed title and update time. If save fails, the management window remains open, the current selection is preserved, the edited buffer is preserved, and rollback is handled by `ConversationSummaryPersistenceService`.
 
-While a selected summary has unsaved edits, selecting another summary is blocked and closing the window asks whether to discard changes. Saving disables list interaction, editing, duplicate saves, and discard until the operation completes.
+AI regeneration uses the selected item's exact `ConversationSummary` reference and the `ModelId` captured when the management window opened. It calls `ConversationSummarizer.RegenerateDraftAsync`, which uses the summary's original `StartMessageId` and `EndMessageId` to read raw `ChatSession.Messages`.
 
-The management window shows an empty state when the current session has no summaries. It does not create summaries, regenerate summaries with AI, delete summaries, or manage summaries from other chat sessions.
+Regeneration does not auto-save. A successful AI result is applied only to the editable buffer, so `IsDirty` becomes true when the draft differs from the persisted summary. The user must click Save before the persisted `ConversationSummary` changes.
+
+If unsaved edits exist before regeneration, the window asks whether the AI result may replace the current buffer. If regeneration fails, is canceled, or returns after the window has closed, the current buffer, selected summary, persisted domain object, and error state are not overwritten by stale results.
+
+The management window validates whether the selected summary's persisted range can be regenerated. Corrupted ranges, missing endpoints, reversed ranges, or overlap corruption leave the summary visible and still allow manual edit, Save, and Delete, but disable AI regeneration with an explanatory message. The UI does not repair, rewrite, or delete invalid ranges automatically.
+
+Delete uses the selected item's exact `ConversationSummary` reference and calls `ConversationSummaryPersistenceService.DeleteAsync`. Delete asks for confirmation and notes that raw conversation messages are not removed. If unsaved edits exist, the confirmation also states that the unsaved edits will be discarded.
+
+On delete success, the target summary and its wrapper are removed, the editor buffer is cleared, and selection becomes null even if other summaries remain. If no summaries remain, the empty state is shown. If summaries remain, the window asks the user to select one from the list. Delete failure or cancellation preserves the wrapper, selection, editable buffer, and domain state, with an error message.
+
+While a selected summary has unsaved edits, selecting another summary is blocked and closing the window asks whether to discard changes. Save and Delete block closing while persistence is in progress. AI regeneration does not block closing; if the window closes, active regeneration is canceled and late success/failure is ignored. Any busy operation disables list interaction, editing, duplicate actions, discard, Save, Delete, and Regenerate as appropriate.
+
+The management window shows an empty state when the current session has no summaries. It does not create summaries or manage summaries from other chat sessions.
 
 ## Old Unsummarized Count
 
@@ -294,8 +308,6 @@ OldUnsummarizedWarningThreshold = 20
 The following are intentionally not implemented yet:
 
 - Warning banner UI
-- Regeneration UI
-- Delete UI
 - Automatic summary
 - Long-term memory
 - Embeddings, vector DB, semantic search

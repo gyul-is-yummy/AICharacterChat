@@ -62,11 +62,18 @@
                     <ListBox Grid.Row="1"
                              ItemsSource="{Binding Summaries}"
                              SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                             IsEnabled="{Binding IsListInteractionEnabled}"
                              Background="#16213e"
                              BorderBrush="#38466f"
                              Foreground="White"
                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="IsHitTestVisible"
+                                        Value="{Binding DataContext.IsListInteractionEnabled, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                                <Setter Property="Focusable"
+                                        Value="{Binding DataContext.IsListInteractionEnabled, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="3,4">
@@ -101,6 +108,15 @@
                                VerticalAlignment="Center"
                                TextAlignment="Center"/>
 
+                    <TextBlock Text="왼쪽에서 관리할 요약을 선택하세요."
+                               Visibility="{Binding HasNoSelectionWithSummaries, Converter={StaticResource BoolToVisibilityConverter}}"
+                               Foreground="#8f9fca"
+                               FontSize="14"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center"/>
+
                     <Grid Visibility="{Binding HasSelectedItem, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -120,6 +136,20 @@
                                        Visibility="{Binding IsSaving, Converter={StaticResource BoolToVisibilityConverter}}"
                                        Foreground="#d8e6ff"
                                        FontSize="13"/>
+                            <TextBlock Text="AI가 요약을 다시 생성하는 중..."
+                                       Visibility="{Binding IsRegenerating, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Foreground="#d8e6ff"
+                                       FontSize="13"/>
+                            <TextBlock Text="요약을 삭제하는 중..."
+                                       Visibility="{Binding IsDeleting, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Foreground="#d8e6ff"
+                                       FontSize="13"/>
+                            <TextBlock Text="{Binding RegenerateUnavailableMessage}"
+                                       Visibility="{Binding HasRegenerateUnavailableMessage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       Foreground="#f6d365"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Margin="0,6,0,0"/>
                             <TextBlock Text="저장하거나 변경을 취소한 뒤 다른 요약을 선택할 수 있습니다."
                                        Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibilityConverter}}"
                                        Foreground="#f6d365"
@@ -196,6 +226,26 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     Margin="0,14,0,0">
+                            <Button Content="AI 다시 생성"
+                                    Width="104"
+                                    Height="34"
+                                    Margin="0,0,8,0"
+                                    Background="#1f4966"
+                                    Foreground="#d8f1ff"
+                                    BorderBrush="#5f8fb0"
+                                    BorderThickness="1"
+                                    Cursor="Hand"
+                                    Command="{Binding RegenerateCommand}"/>
+                            <Button Content="삭제"
+                                    Width="70"
+                                    Height="34"
+                                    Margin="0,0,8,0"
+                                    Background="#5a2530"
+                                    Foreground="#ffd8df"
+                                    BorderBrush="#a44b5d"
+                                    BorderThickness="1"
+                                    Cursor="Hand"
+                                    Command="{Binding DeleteCommand}"/>
                             <Button Content="변경 취소"
                                     Width="92"
                                     Height="34"

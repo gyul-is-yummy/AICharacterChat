@@ -134,16 +134,26 @@ MainViewModel current session
 -> SummaryManagementRequested event
 -> MainWindow opens modal SummaryManagementWindow
 -> SummaryManagementViewModel editable buffer
+-> ConversationSummarizer.RegenerateDraftAsync on AI regenerate
 -> ConversationSummaryPersistenceService.UpdateAsync on Save
+-> ConversationSummaryPersistenceService.DeleteAsync on Delete
 ```
 
 `MainViewModel` does not construct the management window. It raises a Presentation event with a `SummaryManagementRequest` that captures the current `WorldStore`, `ChatSession`, `Character`, and model id. `MainWindow`, as the composition root, creates `SummaryManagementViewModel` and the modal window.
 
-`SummaryManagementViewModel` depends on `ConversationSummaryPersistenceService` and the captured request. It does not depend on Anthropic, `ConversationSummarizer`, or WPF window types directly.
+`SummaryManagementViewModel` depends on `ConversationSummaryPersistenceService`, `ConversationSummarizer`, and the captured request. It does not depend on Anthropic or WPF window types directly. `MainWindow` passes the same `ConversationSummarizer` and summary persistence service used by the Preview flow; it does not create a second provider client, repository, or summarizer graph.
 
 `SummaryManagementItemViewModel` wraps a persisted `ConversationSummary` as a Presentation-only list item. It preserves the exact summary object reference so updates are applied to the selected object through `ConversationSummaryPersistenceService.UpdateAsync`.
 
-Editable fields are Presentation state until Save succeeds. Dirty state blocks changing the selected summary, and the window asks for confirmation before discarding unsaved edits on close. The management flow does not create, delete, or AI-regenerate summaries.
+Editable fields are Presentation state until Save succeeds. Dirty state blocks changing the selected summary, and the window asks for confirmation before discarding unsaved edits on close.
+
+AI regeneration targets the selected item's exact `ConversationSummary` reference and uses the `ModelId` captured in `SummaryManagementRequest`. The result is copied only into the editable buffer and is never saved automatically. Dirty regeneration asks for confirmation before replacing the current buffer.
+
+Regeneration owns a per-operation cancellation token source and uses operation identity checks before applying success or failure results. Closing the modal cancels active regeneration, and late success/failure from a provider that ignored cancellation is ignored. Save and Delete close attempts are blocked while persistence is in progress.
+
+Delete also targets the selected item by object reference and delegates persistence to `ConversationSummaryPersistenceService.DeleteAsync`. On success the wrapper is removed, selection is cleared, and raw chat messages remain unchanged.
+
+Invalid persisted summary ranges are not repaired by Presentation. They stay visible and can still be manually edited, saved, or deleted, but AI regeneration is disabled because it requires the original raw message range.
 
 ## Current Boundaries
 
