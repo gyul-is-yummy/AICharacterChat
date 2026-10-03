@@ -66,7 +66,7 @@ Overlapping ranges are rejected:
 1-10, 8-20
 ```
 
-## Historical Context
+## Historical Compression
 
 Historical Context is not persisted. It is built at request time from:
 
@@ -76,7 +76,7 @@ ChatSession.Summaries
 RecentMessageSelector result
 ```
 
-Recent messages remain actual `ChatCompletionMessage` values. The current recent limit remains:
+Recent messages remain actual `ChatCompletionMessage` values. The current recent limit is:
 
 ```text
 MaxRecentMessages = 20
@@ -100,7 +100,7 @@ Clear Chat clears both `ChatSession.Messages` and `ChatSession.Summaries` for th
 
 If saving fails, the in-memory messages and summaries are restored and the failure is propagated instead of leaving a partially cleared session.
 
-## Summary Draft Generation
+## AI Draft Generation
 
 `ConversationSummarizer` can generate a `SummaryDraft` from a selected continuous `ChatMessage` range.
 
@@ -156,7 +156,7 @@ Empty summary section values are normalized to:
 
 Empty titles, titles longer than 40 characters, JSON parse failures, API failures, and cancellations all return a generation result without changing domain data.
 
-## Summary Persistence
+## Persistence
 
 `ConversationSummaryPersistenceService` applies approved summary changes to a `ChatSession` and saves the containing `WorldStore`.
 
@@ -181,9 +181,13 @@ The persistence service validates that the `ChatSession` belongs to the supplied
 
 Disk atomicity remains the responsibility of `JsonWorldRepository` and `JsonFileWriter`, which write through a temporary file and replace or move the final JSON file.
 
+## Identity Invariant and Repair
+
 `ConversationSummary.Id` is a session-local persisted identity. After `JsonWorldRepository.LoadAsync` succeeds, every `ConversationSummary.Id` in a single `ChatSession.Summaries` list is non-empty and unique within that session.
 
-If externally edited JSON contains duplicate summary ids or `Guid.Empty` summary ids, the persistence load boundary repairs only the affected ids. The first valid occurrence in each session keeps its id, later duplicates receive new `Guid` values, and `Guid.Empty` values receive new non-empty `Guid` values. The repair preserves summary order, range, title, section content, timestamps, and revision.
+If externally edited JSON contains duplicate summary ids or `Guid.Empty` summary ids, the persistence load boundary repairs only the affected ids. The first valid occurrence in each session keeps its id, later duplicates receive new `Guid` values, and `Guid.Empty` values receive new non-empty `Guid` values.
+
+The repair preserves summary order, range, title, section content, timestamps, and revision.
 
 When identity repair changes data during load, the repaired `WorldStore` is immediately persisted through the normal `JsonWorldRepository.SaveAsync` and `JsonFileWriter` atomic write path. Normal current-format loads with no identity repair are not rewritten for this reason.
 
@@ -201,7 +205,7 @@ Range validation reuses `ConversationSummaryService.ValidateRange`, so existing 
 
 Sending a new chat message is disabled while selection mode is active. Session changes and Clear Chat clear the transient selection state.
 
-## Summary Preview
+## Preview
 
 After a valid range is selected, the chat screen can open a modal Summary Preview workflow.
 
@@ -215,9 +219,9 @@ Message range selection
 -> ConversationSummaryPersistenceService.AddAsync
 ```
 
-`SummaryPreviewRequest` is Presentation workflow context, not persisted data. It captures the current `WorldStore`, `ChatSession`, `Character`, selected start/end message ids, and the selected model id when the user clicks Next.
+`SummaryPreviewRequest` captures the current `WorldStore`, `ChatSession`, `Character`, selected start/end message ids, and the selected model id when the user clicks Next.
 
-The preview opens before AI generation completes and shows a loading state inside the modal window. Initial generation and regeneration both use `ConversationSummarizer.GenerateNewDraftAsync` with the captured message range and model id. `RegenerateDraftAsync` remains reserved for existing saved summaries.
+Initial generation and regeneration both use `ConversationSummarizer.GenerateNewDraftAsync` with the captured message range and model id. `RegenerateDraftAsync` remains reserved for existing saved summaries.
 
 AI generation and regeneration remain read-only. They do not mutate `ChatSession.Messages`, do not add to `ChatSession.Summaries`, and do not save repositories.
 
@@ -233,15 +237,13 @@ UnresolvedMatters
 PersistentState
 ```
 
-The selected range is immutable in the preview. To change it, the user cancels the preview and changes the message range selection.
-
 Saving is user-controlled. AI output is never auto-saved. Only clicking Save builds a new `SummaryDraft` from the edited fields and calls `ConversationSummaryPersistenceService.AddAsync`.
 
 If preview generation fails, the preview remains open and the selected range in the main window is preserved. If regeneration fails, the current editable fields are preserved. If save fails, the preview remains open, edited fields are preserved, and persistence rollback is handled by `ConversationSummaryPersistenceService`.
 
 Canceling the preview or closing it with X does not persist anything and returns to the existing message range selection. Saving successfully closes the preview and clears the transient selection state.
 
-## Summary Management
+## Management
 
 The chat screen can open a modal Summary Management workflow for the current `ChatSession`.
 
@@ -257,7 +259,7 @@ MainViewModel
 
 `SummaryManagementRequest` captures the current `WorldStore`, `ChatSession`, `Character`, and selected model id. The management workflow edits only summaries that already exist in the captured session.
 
-`SummaryManagementItemViewModel` is a Presentation-only wrapper around a persisted `ConversationSummary`. It keeps the exact domain object reference so update persistence targets the selected summary object, not the first matching id.
+`SummaryManagementItemViewModel` is a Presentation-only wrapper around a persisted `ConversationSummary`. It keeps the exact domain object reference so update, regenerate, and delete target the selected summary object, not the first matching id.
 
 The editor uses a separate editable buffer for:
 
@@ -273,8 +275,6 @@ PersistentState
 
 Changing these fields does not mutate the domain summary until Save succeeds. Save builds a `SummaryDraft` from the buffer, preserves the summary range, and calls `ConversationSummaryPersistenceService.UpdateAsync`.
 
-If save succeeds, the selected item refreshes its displayed title and update time. If save fails, the management window remains open, the current selection is preserved, the edited buffer is preserved, and rollback is handled by `ConversationSummaryPersistenceService`.
-
 AI regeneration uses the selected item's exact `ConversationSummary` reference and the `ModelId` captured when the management window opened. It calls `ConversationSummarizer.RegenerateDraftAsync`, which uses the summary's original `StartMessageId` and `EndMessageId` to read raw `ChatSession.Messages`.
 
 Regeneration does not auto-save. A successful AI result is applied only to the editable buffer, so `IsDirty` becomes true when the draft differs from the persisted summary. The user must click Save before the persisted `ConversationSummary` changes.
@@ -287,11 +287,11 @@ Delete uses the selected item's exact `ConversationSummary` reference and calls 
 
 On delete success, the target summary and its wrapper are removed, the editor buffer is cleared, and selection becomes null even if other summaries remain. If no summaries remain, the empty state is shown. If summaries remain, the window asks the user to select one from the list. Delete failure or cancellation preserves the wrapper, selection, editable buffer, and domain state, with an error message.
 
-While a selected summary has unsaved edits, selecting another summary is blocked and closing the window asks whether to discard changes. Save and Delete block closing while persistence is in progress. AI regeneration does not block closing; if the window closes, active regeneration is canceled and late success/failure is ignored. Any busy operation disables list interaction, editing, duplicate actions, discard, Save, Delete, and Regenerate as appropriate.
+While a selected summary has unsaved edits, selecting another summary is blocked and closing the window asks whether to discard changes. Save and Delete block closing while persistence is in progress. AI regeneration does not block closing; if the window closes, active regeneration is canceled and late success/failure is ignored.
 
-The management window shows an empty state when the current session has no summaries. It does not create summaries or manage summaries from other chat sessions.
+Dirty or busy state blocks changing the selected summary through ViewModel guards and item-level hit-test/focus locks, while keeping the `ListBox` itself enabled so the list can still scroll.
 
-## Old Unsummarized Count
+## Unsummarized Metadata
 
 `HistoricalContextBuilder` counts only historical raw messages that were not replaced by a summary.
 
@@ -301,14 +301,17 @@ The warning threshold is:
 OldUnsummarizedWarningThreshold = 20
 ```
 
-3-A does not show a WPF warning banner yet. It only exposes the count and warning boolean through context metadata.
+The backend exposes the count and warning boolean through context metadata. WPF UI for Unsummarized Warning is not implemented yet.
 
 ## Not Implemented Yet
 
 The following are intentionally not implemented yet:
 
-- Warning banner UI
-- Automatic summary
-- Long-term memory
-- Embeddings, vector DB, semantic search
-- Token budget
+- Unsummarized Warning UI
+- duplicate `ChatMessage.Id` recovery
+- invalid / reversed Summary range repair
+- overlapping Summary range repair
+- Long-term Memory
+- automatic Summary generation
+- global Summary concurrency coordination
+- embeddings, vector DB, semantic search

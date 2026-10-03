@@ -1,5 +1,7 @@
 # Data Model
 
+This document describes Domain and persisted JSON shape. Workflow behavior belongs in the subsystem documents.
+
 ## Store
 
 ```text
@@ -24,13 +26,13 @@ World
   ChatSessions[]
 ```
 
-`World` owns `ChatSessions` in this refactor. This keeps persistence simple while preserving identifiers for a future split into separate chat storage.
+`World` owns `ChatSessions`. This keeps persistence simple while preserving identifiers for a future split into separate chat storage.
 
 When a new character is created, the selected user persona is passed as creation workflow state and stored in the default `ChatSession.UserPersonaId`. The `Character` model must not regain selected-user/session state.
 
 ## Character
 
-`Character` contains only character configuration:
+`Character` contains character configuration:
 
 ```text
 Id
@@ -49,7 +51,11 @@ Relationships[]
 Lore[]
 ```
 
-`DefaultScenario` replaces legacy `Situation`.
+`DefaultScenario` replaces legacy `CharacterProfile.Situation`.
+
+## UserPersona
+
+`UserPersona` is the current model for user profile/persona data migrated from legacy `UserProfile`.
 
 ## ChatSession
 
@@ -69,6 +75,8 @@ Scenario selection priority:
 if ChatSession.Scenario is not empty -> use ChatSession.Scenario
 else -> use Character.DefaultScenario
 ```
+
+`Messages` stores the full conversation history. `Summaries` stores user-managed conversation summary ranges for this session.
 
 ## ChatMessage
 
@@ -108,3 +116,5 @@ The range is inclusive and uses message ids instead of persisted indexes. Summar
 The six section fields are stored separately. Empty sections use `없음`.
 
 Summaries never remove or mutate source `Messages`. Historical Context is rendered on demand from `Messages`, `Summaries`, and the recent selection; it is not persisted.
+
+After a successful `JsonWorldRepository.LoadAsync`, every `ConversationSummary.Id` in a single `ChatSession.Summaries` list is non-empty and unique within that session. This is a session-local persisted identity invariant.

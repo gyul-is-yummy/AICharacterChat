@@ -1,11 +1,12 @@
 # Context
 
-`ContextBuilder` is the Application-layer component that decides what provider-independent context should be sent to the chat model.
+`ContextBuilder` is the Application-layer component that decides what provider-independent context is sent to the chat model.
 
 It receives the current `World`, `Character`, `ChatSession`, and raw user input, then builds a `BuiltChatContext` containing:
 
 - `SystemPrompt`
 - `Messages`
+- request-time context metadata
 
 It does not call HTTP APIs, create Anthropic DTOs, choose models, decide `MaxTokens`, save repositories, mutate chat sessions, add assistant messages, roll back state, or update UI.
 
@@ -65,11 +66,13 @@ Invalid or overlapping summaries are not repaired, deleted, or rewritten by `His
 
 All user/AI data values inserted into Historical Context are escaped. This includes summary titles, the six summary section values, and raw historical message contents.
 
-`HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount`. The warning threshold is currently 20 raw historical messages, but no WPF warning UI exists in 3-A.
+`HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount` and a warning boolean. The warning threshold is currently 20 raw historical messages. WPF UI for this warning is not implemented yet.
+
+Summary-specific rules are described in [Conversation summaries](SUMMARIES.md).
 
 ## Lore
 
-`LoreMatcher` still checks only the current raw user input. Recent messages are not used as lore search input.
+`LoreMatcher` checks only the current raw user input. Recent messages and historical summaries are not used as lore search input.
 
 The current implementation does not include semantic search, embeddings, lore priority, or past-conversation-based lore activation.
 
@@ -94,8 +97,6 @@ When request messages are created, every included `User` role message is wrapped
 
 This wrapping happens only on the new `ChatCompletionMessage` values. It must not mutate `ChatMessage.Content`.
 
-## Future Extension
+## Boundary
 
-AI Summary generation and Summary Memory UI are not implemented.
-
-If summary memory is added later, `ContextBuilder` is the likely integration point: it can combine a future summary with the existing system prompt, relevant lore, and recent message window before creating the final request context.
+Summary creation, preview, management, regeneration, delete, and persistence are not `ContextBuilder` responsibilities. Context uses saved summaries only as request-time historical compression input.
