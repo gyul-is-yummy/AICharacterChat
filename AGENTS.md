@@ -106,7 +106,7 @@ When reporting completed work, include:
 
 ## Document Maintenance Policy
 
-### Update Every Phase / Verified Commit
+### Update Every Phase / Verified State
 
 Update [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md) when any of the following occurs:
 
@@ -119,12 +119,14 @@ Update [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md) when any of the following 
 
 Minimum handoff updates:
 
-- latest verified commit
+- Last Code-Verified Baseline, when application source changes have been verified
 - build/test baseline
 - completed phase
 - important new decisions
 - next phase
 - deferred backlog
+
+`Last Code-Verified Baseline` means the latest commit whose application source state has been verified with the required build, tests, and manual verification. Update it only when application source changed and that exact code state has been verified. A documentation-only commit is not, by itself, a new code-verified baseline.
 
 ### Update Only When the Owned Structure Changes
 
@@ -197,4 +199,4 @@ Do not silently change architecture policy just because a document appears stale
 
 ## Handoff Maintenance Rule
 
-When a verified phase commit is completed, update [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md) before asking another Codex conversation to continue. Keep it concise: current state, next step, important decisions, and links to source-of-truth docs.
+When a verified phase commit or verified source state is completed, update [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md) before asking another Codex conversation to continue. Keep it concise: current state, next step, important decisions, and links to source-of-truth docs. Documentation-only commits may update handoff content, but they must not be recorded as the Last Code-Verified Baseline unless application source was also changed and verified.

@@ -2,13 +2,15 @@
 
 This file records the current verified development state for a new Codex conversation or another device. It is not a replacement for the source-of-truth documentation linked below.
 
-## Current Verified Baseline
+## Last Code-Verified Baseline
 
-Latest verified commit:
+Last code-verified baseline commit:
 
 ```text
 5ac12bd91de3b29d28a89f37057b99ca66b25bec
 ```
+
+This is the last commit whose application source state was verified with Build, Tests, and the required manual UI smoke test. It is not necessarily the current repository HEAD.
 
 Subject:
 
@@ -37,6 +39,18 @@ Manual UI smoke test:
 ```text
 passed
 ```
+
+Repository HEAD may be newer than this baseline. If every commit after the Last Code-Verified Baseline is documentation-only, the code-verified baseline remains valid and a newer HEAD alone is not an error.
+
+Before continuing work on another device:
+
+1. Check the current HEAD.
+2. Inspect commits after the Last Code-Verified Baseline.
+3. Distinguish documentation-only changes from application source changes.
+
+If application source changed after the Last Code-Verified Baseline, do not assume the previous Build/Test result still verifies the current code. Run the appropriate build/tests and any required manual verification, then establish a new code-verified baseline before treating the newer source state as verified.
+
+Do not record a documentation-only commit as the new Last Code-Verified Baseline merely because it is repository HEAD. The handoff tracks the verified application-code state to avoid a self-reference cycle where editing this file makes the recorded HEAD immediately stale.
 
 ## Completed Phases
 
@@ -97,11 +111,17 @@ Run these checks in the new environment:
 ```bash
 git status --short
 git log --oneline -5
+git diff --name-status 5ac12bd91de3b29d28a89f37057b99ca66b25bec..HEAD
+```
+
+If commits after the Last Code-Verified Baseline include application source changes, run:
+
+```bash
 dotnet build AICharacterChat.sln
 dotnet test AICharacterChat.sln --no-build --verbosity normal
 ```
 
-If the verified baseline differs, report it before changing code.
+If the Last Code-Verified Baseline cannot be found, or if newer application source changes have not been verified yet, report that before changing code.
 
 ## Required Reading
 
