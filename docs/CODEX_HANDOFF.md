@@ -65,8 +65,9 @@ Do not record a documentation-only commit as the new Last Code-Verified Baseline
 - Phase 3-B.4.1 Preview Lifecycle Stability
 - Phase 3-B.5a Summary Identity Integrity
 - Phase 3-B.5b Summary Management
+- Phase 3-B.6 Unsummarized Warning
 
-Phase 3-B.5 is complete.
+Phase 3-B.6 is implemented in the current working tree but is not committed yet.
 
 ## Important Current Decisions
 
@@ -77,6 +78,29 @@ Phase 3-B.5 is complete.
 - Summary update/delete/regenerate operations target exact `ConversationSummary` object references.
 - Persisted summary ids are repaired at the JSON load boundary so each successful `ChatSession` load has non-empty, session-local unique summary ids.
 - Summary Management supports manual edit, AI regenerate, and delete for saved summaries.
+- Unsummarized Warning is a passive WPF notice derived from Application context semantics; it does not block send or automatically create summaries.
+
+## Current Working Tree Verification
+
+The current working tree contains uncommitted application source changes for Phase 3-B.6.
+
+Build:
+
+```text
+0 warnings
+0 errors
+```
+
+Tests:
+
+```text
+235 discovered
+235 passed
+0 failed
+0 skipped
+```
+
+This verifies the uncommitted working tree only. Commit this source state before updating the Last Code-Verified Baseline hash.
 
 Detailed behavior lives in:
 
@@ -88,12 +112,12 @@ Detailed behavior lives in:
 ## Next Phase
 
 ```text
-Phase 3-B.6
+Audit and commit Phase 3-B.6
 Unsummarized Warning
-NOT IMPLEMENTED
+IMPLEMENTED IN WORKING TREE
 ```
 
-Do not begin this phase unless the user explicitly asks.
+Do not begin a later feature phase until this working tree is verified and committed, unless the user explicitly redirects.
 
 ## Deferred Backlog
 

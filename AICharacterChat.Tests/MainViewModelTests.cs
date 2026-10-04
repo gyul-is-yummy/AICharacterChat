@@ -630,6 +630,135 @@ namespace AICharacterChat.Tests
             Assert.Equal(summarySnapshot, session.Summaries);
         }
 
+        [Fact]
+        public async Task InitializesConversationHistoryWarningState()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+
+            await vm.InitializeAsync();
+
+            Assert.Equal(20, vm.UnsummarizedOldMessageCount);
+            Assert.True(vm.HasUnsummarizedOldMessageWarning);
+            Assert.Contains("20", vm.UnsummarizedOldMessageWarningText);
+        }
+
+        [Fact]
+        public async Task SessionSwitchClearsStaleConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            await vm.AddCharacterAsync(
+                new Character { Id = "char-2", Name = "새 캐릭터" },
+                world.UserPersonas[0].Id);
+
+            Assert.Equal(0, vm.UnsummarizedOldMessageCount);
+            Assert.False(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task SendSuccessRefreshesConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 39);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.InputText = "새 메시지";
+
+            await vm.SendMessageCommand.ExecuteAsync(null);
+
+            Assert.True(vm.UnsummarizedOldMessageCount >= 20);
+            Assert.True(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task ClearChatSuccessClearsConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+
+            await vm.ClearChatForCharacterAsync(world.Characters[0]);
+
+            Assert.Equal(0, vm.UnsummarizedOldMessageCount);
+            Assert.False(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task ClearChatSaveFailureRefreshesRolledBackConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var repository = new MemoryWorldRepository(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            var vm = CreateViewModel(repository);
+            await vm.InitializeAsync();
+            repository.SaveException = new InvalidOperationException("저장 실패");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => vm.ClearChatForCharacterAsync(world.Characters[0]));
+
+            Assert.Equal(20, vm.UnsummarizedOldMessageCount);
+            Assert.True(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task SummaryPreviewSavedRefreshesConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var session = world.ChatSessions[0];
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.SummaryPreviewRequested += (_, e) =>
+            {
+                session.Summaries.Add(CreateSummary(session, 1, 20, "저장된 요약"));
+                e.Result = SummaryPreviewResult.Saved;
+            };
+
+            vm.BeginSummarySelectionCommand.Execute(null);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[0]);
+            vm.SelectSummaryMessageCommand.Execute(vm.MessageItems[19]);
+            vm.OpenSummaryPreviewCommand.Execute(null);
+
+            Assert.Equal(0, vm.UnsummarizedOldMessageCount);
+            Assert.False(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task SummaryManagementCloseRefreshesConversationHistoryWarning()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var session = world.ChatSessions[0];
+            session.Summaries.Add(CreateSummary(session, 1, 20, "삭제될 요약"));
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.SummaryManagementRequested += (_, _) => session.Summaries.Clear();
+
+            vm.OpenSummaryManagementCommand.Execute(null);
+
+            Assert.Equal(20, vm.UnsummarizedOldMessageCount);
+            Assert.True(vm.HasUnsummarizedOldMessageWarning);
+        }
+
+        [Fact]
+        public async Task WarningDoesNotBlockSendCommand()
+        {
+            var world = TestData.CreateWorld();
+            AddUserMessages(world.ChatSessions[0], 40);
+            var vm = CreateViewModel(new WorldStore { ActiveWorldId = world.Id, Worlds = [world] });
+            await vm.InitializeAsync();
+            vm.InputText = "보낼 메시지";
+
+            Assert.True(vm.HasUnsummarizedOldMessageWarning);
+            Assert.True(vm.SendMessageCommand.CanExecute(null));
+        }
+
         private static async Task<MainViewModel> CreateInitializedViewModelWithMessagesAsync(int messageCount)
         {
             var world = TestData.CreateWorld();
@@ -664,7 +793,10 @@ namespace AICharacterChat.Tests
                         new PromptBuilder(),
                         new LoreMatcher(),
                         new RecentMessageSelector(),
-                        new HistoricalContextBuilder())));
+                        new HistoricalContextBuilder())),
+                new ConversationHistoryStatusService(
+                    new RecentMessageSelector(),
+                    new HistoricalContextBuilder()));
         }
 
         private static void AddMessages(ChatSession session, int count)
@@ -673,6 +805,27 @@ namespace AICharacterChat.Tests
             for (int i = 1; i <= count; i++)
                 session.Messages.Add(new ChatMessage(i % 2 == 0 ? ChatRole.Assistant : ChatRole.User, $"message-{i}"));
         }
+
+        private static void AddUserMessages(ChatSession session, int count)
+        {
+            session.Messages.Clear();
+            for (int i = 1; i <= count; i++)
+                session.Messages.Add(new ChatMessage(ChatRole.User, $"message-{i}"));
+        }
+
+        private static ConversationSummary CreateSummary(ChatSession session, int startOneBased, int endOneBased, string title) =>
+            new()
+            {
+                StartMessageId = session.Messages[startOneBased - 1].Id,
+                EndMessageId = session.Messages[endOneBased - 1].Id,
+                Title = title,
+                CurrentSituation = "상황",
+                KeyEvents = "사건",
+                RelationshipChanges = "관계",
+                PromisesAndImportantStatements = "약속",
+                UnresolvedMatters = "미해결",
+                PersistentState = "상태"
+            };
 
         private class MemoryWorldRepository : IWorldRepository
         {

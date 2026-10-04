@@ -301,13 +301,14 @@ The warning threshold is:
 OldUnsummarizedWarningThreshold = 20
 ```
 
-The backend exposes the count and warning boolean through context metadata. WPF UI for Unsummarized Warning is not implemented yet.
+The backend exposes the count and warning boolean through context metadata.
+
+`ConversationHistoryStatusService` reuses the same `RecentMessageSelector` and `HistoricalContextBuilder` semantics to query the current session status for WPF. The chat screen shows a passive notice when the warning boolean is true, includes the raw unsummarized count, and offers the existing `요약 만들기` action. The notice does not block sending, does not auto-generate summaries, does not recommend a range, and is not persisted.
 
 ## Not Implemented Yet
 
 The following are intentionally not implemented yet:
 
-- Unsummarized Warning UI
 - duplicate `ChatMessage.Id` recovery
 - invalid / reversed Summary range repair
 - overlapping Summary range repair

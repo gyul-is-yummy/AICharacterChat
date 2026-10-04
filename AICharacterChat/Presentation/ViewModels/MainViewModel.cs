@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using AICharacterChat.Application.Chat;
+using AICharacterChat.Application.Context;
 using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Models;
 using AICharacterChat.Application.Summaries;
@@ -21,6 +22,7 @@ namespace AICharacterChat.Presentation.ViewModels
         private readonly ISettingsRepository _settingsRepository;
         private readonly IChatModelCatalog _chatModelCatalog;
         private readonly ChatService _chatService;
+        private readonly ConversationHistoryStatusService _conversationHistoryStatusService;
         private WorldStore _store = new();
         private AppSettings _settings = new();
         private World? _selectedWorld;
@@ -35,6 +37,8 @@ namespace AICharacterChat.Presentation.ViewModels
         private ChatMessage? _summarySelectionStartMessage;
         private ChatMessage? _summarySelectionEndMessage;
         private string _summarySelectionError = "";
+        private int _unsummarizedOldMessageCount;
+        private bool _hasUnsummarizedOldMessageWarning;
 
         public ObservableCollection<World> Worlds { get; } = new();
         public ObservableCollection<Character> Characters { get; } = new();
@@ -61,12 +65,14 @@ namespace AICharacterChat.Presentation.ViewModels
             ISettingsRepository settingsRepository,
             IChatModelCatalog chatModelCatalog,
             ChatService chatService,
+            ConversationHistoryStatusService conversationHistoryStatusService,
             ConversationSummaryService? summaryService = null)
         {
             _worldRepository = worldRepository;
             _settingsRepository = settingsRepository;
             _chatModelCatalog = chatModelCatalog;
             _chatService = chatService;
+            _conversationHistoryStatusService = conversationHistoryStatusService;
             _summaryService = summaryService ?? new ConversationSummaryService();
 
             SelectWorldCommand = new AsyncRelayCommand<World>(SelectWorldAsync);
@@ -176,6 +182,24 @@ namespace AICharacterChat.Presentation.ViewModels
         public bool HasSelectedWorld => SelectedWorld != null;
         public string SelectedCharacterName => SelectedCharacter?.Name ?? "";
         public bool HasMessages => SelectedChatSession?.Messages.Count > 0;
+
+        public int UnsummarizedOldMessageCount
+        {
+            get => _unsummarizedOldMessageCount;
+            private set
+            {
+                if (SetProperty(ref _unsummarizedOldMessageCount, value))
+                {
+                    OnPropertyChanged(nameof(UnsummarizedOldMessageWarningText));
+                }
+            }
+        }
+
+        public bool HasUnsummarizedOldMessageWarning =>
+            _hasUnsummarizedOldMessageWarning;
+
+        public string UnsummarizedOldMessageWarningText =>
+            $"오래된 대화 중 아직 요약되지 않은 메시지가 {UnsummarizedOldMessageCount}개 있습니다. 필요한 구간을 요약하면 이전 대화를 더 간결하게 참고할 수 있습니다.";
 
         public bool IsSummarySelectionMode
         {
@@ -415,6 +439,7 @@ namespace AICharacterChat.Presentation.ViewModels
                 SelectedChatSession = null;
                 Messages.Clear();
                 MessageItems.Clear();
+                RefreshConversationHistoryStatus();
                 return;
             }
 
@@ -525,6 +550,7 @@ namespace AICharacterChat.Presentation.ViewModels
             MessageItems.Clear();
             if (SelectedChatSession == null)
             {
+                RefreshConversationHistoryStatus();
                 NotifyMessageStateChanged();
                 return;
             }
@@ -536,7 +562,28 @@ namespace AICharacterChat.Presentation.ViewModels
             }
 
             UpdateSummarySelectionVisuals();
+            RefreshConversationHistoryStatus();
             NotifyMessageStateChanged();
+        }
+
+        private void RefreshConversationHistoryStatus()
+        {
+            if (SelectedChatSession == null)
+            {
+                UnsummarizedOldMessageCount = 0;
+                SetProperty(
+                    ref _hasUnsummarizedOldMessageWarning,
+                    false,
+                    nameof(HasUnsummarizedOldMessageWarning));
+                return;
+            }
+
+            var status = _conversationHistoryStatusService.GetStatus(SelectedChatSession);
+            UnsummarizedOldMessageCount = status.UnsummarizedOldMessageCount;
+            SetProperty(
+                ref _hasUnsummarizedOldMessageWarning,
+                status.HasUnsummarizedOldMessageWarning,
+                nameof(HasUnsummarizedOldMessageWarning));
         }
 
         private void BeginSummarySelection()
@@ -624,7 +671,10 @@ namespace AICharacterChat.Presentation.ViewModels
             SummaryPreviewRequested?.Invoke(this, args);
 
             if (args.Result == SummaryPreviewResult.Saved)
+            {
                 CancelSummarySelection();
+                RefreshConversationHistoryStatus();
+            }
         }
 
         private bool CanOpenSummaryPreview()
@@ -642,6 +692,7 @@ namespace AICharacterChat.Presentation.ViewModels
                 return;
 
             SummaryManagementRequested?.Invoke(this, new SummaryManagementRequestedEventArgs(request));
+            RefreshConversationHistoryStatus();
         }
 
         private bool CanOpenSummaryManagement()

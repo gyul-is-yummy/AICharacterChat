@@ -65,6 +65,7 @@ ConversationSummarizer
 ConversationSummaryService
 ConversationSummaryPersistenceService
 HistoricalContextBuilder
+ConversationHistoryStatusService
 ```
 
 High-level workflows:
@@ -82,6 +83,8 @@ saved summary selection
 ```
 
 `MainViewModel` raises presentation events for Preview and Management. `MainWindow` opens the modal windows and supplies the shared services.
+
+`ConversationHistoryStatusService` is an Application query service that reuses recent-message selection and historical context semantics to expose the current session's unsummarized warning status to Presentation.
 
 Summary-specific rules, validation, persistence rollback, identity repair, preview behavior, management behavior, regenerate behavior, and delete behavior are defined in [Conversation summaries](SUMMARIES.md).
 

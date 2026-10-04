@@ -66,7 +66,9 @@ Invalid or overlapping summaries are not repaired, deleted, or rewritten by `His
 
 All user/AI data values inserted into Historical Context are escaped. This includes summary titles, the six summary section values, and raw historical message contents.
 
-`HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount` and a warning boolean. The warning threshold is currently 20 raw historical messages. WPF UI for this warning is not implemented yet.
+`HistoricalContextBuilder` also reports `UnsummarizedOldMessageCount` and a warning boolean. The warning threshold is currently 20 raw historical messages.
+
+`ConversationHistoryStatusService` reuses `RecentMessageSelector` and `HistoricalContextBuilder` to expose the same count and warning state for the current session UI. Presentation must use this query result instead of calculating message counts independently.
 
 Summary-specific rules are described in [Conversation summaries](SUMMARIES.md).
 

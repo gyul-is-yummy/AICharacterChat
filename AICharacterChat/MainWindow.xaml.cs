@@ -35,6 +35,9 @@ namespace AICharacterChat
             var loreMatcher = new LoreMatcher();
             var recentMessageSelector = new RecentMessageSelector();
             var historicalContextBuilder = new HistoricalContextBuilder();
+            var conversationHistoryStatusService = new ConversationHistoryStatusService(
+                recentMessageSelector,
+                historicalContextBuilder);
             var contextBuilder = new ContextBuilder(
                 promptBuilder,
                 loreMatcher,
@@ -53,6 +56,7 @@ namespace AICharacterChat
                 settingsRepository,
                 modelCatalog,
                 chatService,
+                conversationHistoryStatusService,
                 summaryService);
             _viewModel.MessageItems.CollectionChanged += (_, _) => QueueScrollToBottom();
             _viewModel.SummaryPreviewRequested += ViewModel_SummaryPreviewRequested;
