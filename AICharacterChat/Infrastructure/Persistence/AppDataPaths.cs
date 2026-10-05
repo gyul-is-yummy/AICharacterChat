@@ -9,6 +9,7 @@ namespace AICharacterChat.Infrastructure.Persistence
         public string DataDirectory => Path.Combine(RootDirectory, "data");
         public string WorldStorePath => Path.Combine(DataDirectory, "worlds.json");
         public string SettingsPath => Path.Combine(RootDirectory, "settings.json");
+        public string CredentialsPath => Path.Combine(RootDirectory, "credentials.dat");
         public string LegacyWorldsPath { get; }
 
         public AppDataPaths()

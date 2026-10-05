@@ -25,16 +25,19 @@ The test suite uses fake chat-model clients where appropriate. Tests must not ca
 
 ## Configuration
 
-Set the Anthropic API key before running chat requests:
+Set the Anthropic API key inside the app:
 
-```bash
-ANTHROPIC_API_KEY
+```text
+Run the app -> API 설정 -> enter Anthropic API Key -> 저장 / 교체
 ```
+
+The API key is not stored in `settings.json`. It is saved as a Windows-user-protected local credential.
 
 Runtime data is stored under:
 
 ```text
 %LocalAppData%/AICharacterChat/
+  credentials.dat
   settings.json
   data/worlds.json
 ```

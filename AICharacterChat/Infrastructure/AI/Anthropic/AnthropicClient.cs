@@ -15,25 +15,30 @@ namespace AICharacterChat.Infrastructure.AI.Anthropic
     {
         private const string Endpoint = "https://api.anthropic.com/v1/messages";
         private readonly HttpClient _httpClient;
-        private readonly string _apiKey;
+        private readonly IAnthropicApiKeyProvider _apiKeyProvider;
 
-        public AnthropicClient(HttpClient httpClient)
-            : this(httpClient, Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "")
-        {
-        }
-
-        public AnthropicClient(HttpClient httpClient, string apiKey)
+        public AnthropicClient(HttpClient httpClient, IAnthropicApiKeyProvider apiKeyProvider)
         {
             _httpClient = httpClient;
-            _apiKey = apiKey;
+            _apiKeyProvider = apiKeyProvider;
         }
 
         public async Task<string> SendAsync(
             ChatCompletionRequest request,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(_apiKey))
-                throw new ChatModelException("ANTHROPIC_API_KEY 환경 변수가 설정되어 있지 않습니다.");
+            string? apiKey;
+            try
+            {
+                apiKey = await _apiKeyProvider.GetApiKeyAsync(cancellationToken);
+            }
+            catch (AnthropicApiKeyReadException ex)
+            {
+                throw new ChatModelException(ex.Message, null, ex);
+            }
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new ChatModelException("Anthropic API Key가 설정되어 있지 않습니다. API 설정에서 키를 입력해 주세요.");
 
             var anthropicRequest = new AnthropicRequest
             {
@@ -61,7 +66,7 @@ namespace AICharacterChat.Infrastructure.AI.Anthropic
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
-            httpRequest.Headers.Add("x-api-key", _apiKey);
+            httpRequest.Headers.Add("x-api-key", apiKey);
             httpRequest.Headers.Add("anthropic-version", "2023-06-01");
 
             HttpResponseMessage response;

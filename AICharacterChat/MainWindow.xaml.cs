@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using AICharacterChat.Application.Chat;
 using AICharacterChat.Application.Context;
+using AICharacterChat.Application.Interfaces;
 using AICharacterChat.Application.Summaries;
 using AICharacterChat.Domain.Models;
 using AICharacterChat.Infrastructure.AI.Anthropic;
@@ -20,6 +21,7 @@ namespace AICharacterChat
         private readonly MainViewModel _viewModel;
         private readonly ConversationSummarizer _conversationSummarizer;
         private readonly ConversationSummaryPersistenceService _summaryPersistenceService;
+        private readonly IAnthropicApiKeyStore _apiKeyStore;
         private bool _isScrollToBottomQueued;
 
         public MainWindow()
@@ -30,7 +32,8 @@ namespace AICharacterChat
             var worldRepository = new JsonWorldRepository(paths, new LegacyDataMigrator());
             var settingsRepository = new JsonSettingsRepository(paths);
             var modelCatalog = new AnthropicModelCatalog();
-            var chatClient = new AnthropicClient(new HttpClient());
+            _apiKeyStore = new WindowsAnthropicApiKeyStore(paths);
+            var chatClient = new AnthropicClient(new HttpClient(), _apiKeyStore);
             var promptBuilder = new PromptBuilder();
             var loreMatcher = new LoreMatcher();
             var recentMessageSelector = new RecentMessageSelector();
@@ -116,6 +119,13 @@ namespace AICharacterChat
         private async void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             await _viewModel.SaveSettingsAsync();
+        }
+
+        private void ApiSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var viewModel = new ApiSettingsViewModel(_apiKeyStore);
+            var window = new ApiSettingsWindow(viewModel) { Owner = this };
+            window.ShowDialog();
         }
 
         private async void AddWorldButton_Click(object sender, RoutedEventArgs e)

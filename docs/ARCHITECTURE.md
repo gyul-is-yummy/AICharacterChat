@@ -54,6 +54,8 @@ Runtime data is stored under `%LocalAppData%/AICharacterChat/`.
 
 JSON writes go through the shared file writer with temporary files and atomic replacement/move behavior.
 
+Anthropic API credentials are stored separately from JSON domain/settings data. `ApiSettingsWindow` and `ApiSettingsViewModel` use the Application `IAnthropicApiKeyStore` abstraction, implemented by `WindowsAnthropicApiKeyStore` with Windows DPAPI CurrentUser protection at `%LocalAppData%/AICharacterChat/credentials.dat`. `AnthropicClient` depends only on the read-only `IAnthropicApiKeyProvider` and reads the current key for each request.
+
 Legacy migration behavior is described in [Migration](MIGRATION.md).
 
 ## Summary Subsystem

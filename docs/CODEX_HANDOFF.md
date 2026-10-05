@@ -67,7 +67,16 @@ Do not record a documentation-only commit as the new Last Code-Verified Baseline
 - Phase 3-B.5b Summary Management
 - Phase 3-B.6 Unsummarized Warning
 
-Phase 3-B.6 is implemented in the current working tree but is not committed yet.
+Phase 3-B.6 was implemented and committed as `8590fc9eedcc765a88da54386e97b3051cf5b21c`.
+
+Phase 3-B.6 verification:
+
+```text
+Automated verification: PASSED
+Build: 0 warnings, 0 errors
+Tests: 235 discovered, 235 passed, 0 failed, 0 skipped
+Manual WPF verification: PENDING
+```
 
 ## Important Current Decisions
 
@@ -79,10 +88,19 @@ Phase 3-B.6 is implemented in the current working tree but is not committed yet.
 - Persisted summary ids are repaired at the JSON load boundary so each successful `ChatSession` load has non-empty, session-local unique summary ids.
 - Summary Management supports manual edit, AI regenerate, and delete for saved summaries.
 - Unsummarized Warning is a passive WPF notice derived from Application context semantics; it does not block send or automatically create summaries.
+- Anthropic API Key configuration uses an in-app API settings dialog backed by a DPAPI CurrentUser credential file; environment-variable fallback is not part of this working tree.
 
 ## Current Working Tree Verification
 
-The current working tree contains uncommitted application source changes for Phase 3-B.6.
+The current working tree contains uncommitted application source changes for Anthropic API Key UI + Secure Storage.
+
+Implementation:
+
+```text
+complete in working tree
+commit pending
+manual UI/API verification passed
+```
 
 Build:
 
@@ -94,13 +112,13 @@ Build:
 Tests:
 
 ```text
-235 discovered
-235 passed
+254 discovered
+254 passed
 0 failed
 0 skipped
 ```
 
-This verifies the uncommitted working tree only. Commit this source state before updating the Last Code-Verified Baseline hash.
+This verifies the uncommitted working tree only. Commit this source state before updating the Last Code-Verified Baseline hash for the API Key feature.
 
 Detailed behavior lives in:
 
@@ -112,9 +130,9 @@ Detailed behavior lives in:
 ## Next Phase
 
 ```text
-Audit and commit Phase 3-B.6
-Unsummarized Warning
-IMPLEMENTED IN WORKING TREE
+1. Commit Anthropic API Key UI + Secure Storage
+2. Update Last Code-Verified Baseline in a separate documentation-only commit after the feature commit hash exists
+3. Complete Phase 3-B.6 WPF manual verification
 ```
 
 Do not begin a later feature phase until this working tree is verified and committed, unless the user explicitly redirects.

@@ -226,6 +226,16 @@
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
                             Margin="0,0,4,0">
+                    <Button Content="API 설정"
+                            Padding="8,3"
+                            Margin="0,0,8,0"
+                            Background="#24345f"
+                            Foreground="#e8ddff"
+                            BorderBrush="#5f6fa0"
+                            BorderThickness="1"
+                            FontSize="11"
+                            Cursor="Hand"
+                            Click="ApiSettingsButton_Click"/>
                     <TextBlock Text="모델:"
                                Foreground="#9966cc"
                                FontSize="11"
