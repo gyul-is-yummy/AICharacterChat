@@ -7,7 +7,7 @@ This file records the current verified development state for a new Codex convers
 Last code-verified baseline commit:
 
 ```text
-5ac12bd91de3b29d28a89f37057b99ca66b25bec
+60cb5da81dae6d4af141fe38563e777b33f5d9fd
 ```
 
 This is the last commit whose application source state was verified with Build, Tests, and the required manual UI smoke test. It is not necessarily the current repository HEAD.
@@ -15,7 +15,7 @@ This is the last commit whose application source state was verified with Build, 
 Subject:
 
 ```text
-feat: 저장된 대화 요약 재생성 및 삭제 기능 추가
+feat: Anthropic API 키 보안 저장 및 설정 UI 추가
 ```
 
 Build:
@@ -28,8 +28,8 @@ Build:
 Tests:
 
 ```text
-223 discovered
-223 passed
+254 discovered
+254 passed
 0 failed
 0 skipped
 ```
@@ -66,16 +66,30 @@ Do not record a documentation-only commit as the new Last Code-Verified Baseline
 - Phase 3-B.5a Summary Identity Integrity
 - Phase 3-B.5b Summary Management
 - Phase 3-B.6 Unsummarized Warning
+- Anthropic API Key UI + Secure Storage
 
 Phase 3-B.6 was implemented and committed as `8590fc9eedcc765a88da54386e97b3051cf5b21c`.
 
 Phase 3-B.6 verification:
 
 ```text
+Status: COMPLETE
 Automated verification: PASSED
 Build: 0 warnings, 0 errors
 Tests: 235 discovered, 235 passed, 0 failed, 0 skipped
-Manual WPF verification: PENDING
+Manual WPF verification: PASSED
+```
+
+Anthropic API Key UI + Secure Storage was implemented and committed as `60cb5da81dae6d4af141fe38563e777b33f5d9fd`.
+
+Anthropic API Key UI + Secure Storage verification:
+
+```text
+Status: COMPLETE
+Automated verification: PASSED
+Build: 0 warnings, 0 errors
+Tests: 254 discovered, 254 passed, 0 failed, 0 skipped
+Manual UI/API verification: PASSED
 ```
 
 ## Important Current Decisions
@@ -90,17 +104,9 @@ Manual WPF verification: PENDING
 - Unsummarized Warning is a passive WPF notice derived from Application context semantics; it does not block send or automatically create summaries.
 - Anthropic API Key configuration uses an in-app API settings dialog backed by a DPAPI CurrentUser credential file; environment-variable fallback is not part of this working tree.
 
-## Current Working Tree Verification
+## Current Development State
 
-The current working tree contains uncommitted application source changes for Anthropic API Key UI + Secure Storage.
-
-Implementation:
-
-```text
-complete in working tree
-commit pending
-manual UI/API verification passed
-```
+The current application-code baseline is fully verified at `60cb5da81dae6d4af141fe38563e777b33f5d9fd`.
 
 Build:
 
@@ -118,7 +124,7 @@ Tests:
 0 skipped
 ```
 
-This verifies the uncommitted working tree only. Commit this source state before updating the Last Code-Verified Baseline hash for the API Key feature.
+This verifies the application source state at the Last Code-Verified Baseline. A later documentation-only commit may be repository HEAD, but it is not a new code baseline.
 
 Detailed behavior lives in:
 
@@ -130,9 +136,8 @@ Detailed behavior lives in:
 ## Next Phase
 
 ```text
-1. Commit Anthropic API Key UI + Secure Storage
-2. Update Last Code-Verified Baseline in a separate documentation-only commit after the feature commit hash exists
-3. Complete Phase 3-B.6 WPF manual verification
+Current development state: 3-B.6 complete
+Next implementation phase: not yet selected
 ```
 
 Do not begin a later feature phase until this working tree is verified and committed, unless the user explicitly redirects.
@@ -153,7 +158,7 @@ Run these checks in the new environment:
 ```bash
 git status --short
 git log --oneline -5
-git diff --name-status 5ac12bd91de3b29d28a89f37057b99ca66b25bec..HEAD
+git diff --name-status 60cb5da81dae6d4af141fe38563e777b33f5d9fd..HEAD
 ```
 
 If commits after the Last Code-Verified Baseline include application source changes, run:
